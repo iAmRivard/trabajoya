@@ -1,0 +1,310 @@
+Contexto para retomar TrabajoYa Voz AI
+Fecha: 2026-07-03
+Proyecto local: C:\Users\admin\Desktop\Personal\Proyectos\voz-ai-eventlabs
+
+Objetivo general
+----------------
+Construir TrabajoYa, un flujo de agente de voz para ciudadanos comunes en El Salvador.
+La idea es que el usuario pueda cargar un CV opcional o hablar con un agente de voz.
+El agente toma datos tipo CV, completa lo que falte con preguntas, resume el perfil,
+pide confirmacion y guarda el perfil estructurado para luego recomendar empleos,
+cursos y entrevistas simuladas.
+
+Flujo elegido
+-------------
+Opcion B:
+
+CV opcional -> agente de voz confirma/completa datos -> n8n online -> PostgreSQL/Supabase
+
+Por ahora se prioriza la fase de captura de perfil laboral.
+Recomendaciones, cursos y entrevistas se agregan despues.
+
+Marca y tono
+------------
+Marca: TrabajoYa
+Pais: El Salvador
+Tipo de usuario: usuario comun ciudadano
+Tono del agente: neutro latino
+
+Reglas importantes del agente
+-----------------------------
+- No prometer empleo.
+- No pedir DUI ni documentos sensibles.
+- No preguntar religion, genero, apariencia, orientacion sexual, salud,
+  afiliacion politica ni datos financieros.
+- Para edad usar rangos, por ejemplo 18-24, 25-34, 35-44, 45+.
+- Si hay experiencia informal, convertirla en habilidades laborales.
+- Hacer una pregunta a la vez.
+- Si el usuario subio CV, confirmar lo encontrado y preguntar solo lo que falte.
+- Antes de guardar, resumir el perfil y pedir confirmacion.
+
+Arquitectura decidida
+---------------------
+Web TrabajoYa
+-> CV opcional o conversacion con ElevenLabs
+-> ElevenLabs Agent
+-> Tool/Webhook create_candidate_profile
+-> n8n online
+-> PostgreSQL/Supabase
+
+Base de datos
+-------------
+Se eligio Supabase/PostgreSQL o PostgreSQL administrado.
+No se usara DataMCP por ahora.
+
+La version minima usa una sola tabla:
+public.candidate_profiles
+
+El perfil completo se guarda en un campo JSONB llamado profile.
+Esto evita crear muchas tablas prematuras y permite avanzar rapido.
+
+n8n
+---
+Se eligio n8n online/dokploy, no local.
+En Dokploy se instalo:
+n8n + PostgreSQL
+
+Dominio publico de n8n:
+https://n8n.rivasystems.dev/
+
+Estado verificado el 2026-07-04:
+- El dominio de n8n responde correctamente.
+- El stack de n8n tiene contenedores `n8n` y `postgres` corriendo.
+- Hay otro Postgres interno de Dokploy; no usarlo para TrabajoYa.
+- Se creo la base `trabajoya` en el Postgres del stack de n8n.
+- Se ejecuto el schema minimo en `trabajoya.public.candidate_profiles`.
+- Desde el contenedor de n8n, el host interno de Postgres es `postgres`,
+  puerto `5432`, base `trabajoya`.
+- Se creo en n8n el workflow `TrabajoYa - Create Candidate Profile`.
+- El workflow tiene:
+  Webhook -> Validate Payload -> Insert Candidate Profile -> Respond OK.
+- URL de produccion:
+  https://n8n.rivasystems.dev/webhook/trabajoya/create-candidate-profile
+- El webhook fue probado con payload demo, inserto en Postgres y respondio con
+  `ok`, `candidate_id` y `message`.
+- Las filas de prueba fueron borradas; `candidate_profiles` quedo vacia.
+- No guardar passwords ni API keys en este repo.
+
+Solo n8n debe tener dominio publico.
+PostgreSQL debe quedar interno/privado, sin dominio publico.
+
+Configuracion recomendada del dominio en Dokploy:
+Host: n8n.rivasystems.dev
+Path: /
+Internal Path: /
+Strip Path: apagado
+Container Port: 5678
+HTTPS: encendido
+
+Se descarto el template con Workers + Runner + Postgres + Ollama porque Ollama
+no hace falta en este flujo. La IA de voz vendra de ElevenLabs.
+
+ElevenLabs
+----------
+Se usara ElevenLabs real.
+
+Estado verificado el 2026-07-04:
+- Se creo el agente `TrabajoYA`.
+- Agent ID: `agent_3101kwq6aq0yfywbc4jyxqevv9zm`
+- Dashboard:
+  https://elevenlabs.io/app/conversational-ai/agents/agent_3101kwq6aq0yfywbc4jyxqevv9zm
+- Se creo la tool `create_candidate_profile`.
+- Tool ID: `tool_5501kwq6anrbez2889baarjn3yv3`
+- La tool apunta al webhook de n8n:
+  https://n8n.rivasystems.dev/webhook/trabajoya/create-candidate-profile
+- No guardar API keys en este repo.
+
+ElevenLabs debe actuar como agente conversacional:
+escucha -> pregunta -> guarda -> evalua/recomienda despues
+
+No debe ser solamente texto leido en voz alta.
+
+Tool principal planeada:
+create_candidate_profile
+
+Metodo:
+POST
+
+URL futura:
+https://n8n.rivasystems.dev/webhook/trabajoya/create-candidate-profile
+
+El agente llama este webhook despues de resumir el perfil y recibir confirmacion.
+
+Archivos creados en el repo
+---------------------------
+README.md
+- Resumen corto del proyecto y pasos iniciales.
+
+supabase/schema.sql
+- SQL para crear la tabla public.candidate_profiles.
+- Incluye extension pgcrypto, id uuid, profile jsonb, raw_cv_text,
+  conversation_summary y timestamps.
+- Incluye trigger para actualizar updated_at.
+
+docs/elevenlabs-agent.md
+- Prompt base del agente TrabajoYa.
+- Flujo conversacional.
+- Body JSON esperado para create_candidate_profile.
+- Respuesta esperada del webhook.
+
+docs/n8n-webhook-contract.md
+- Contrato del webhook de n8n.
+- Payload de ejemplo.
+- Mapeo de campos para insertar en candidate_profiles.
+- Respuesta esperada para ElevenLabs.
+
+contexto-trabajoya.txt
+- Este archivo.
+
+Esquema de perfil elegido
+-------------------------
+El payload contiene:
+
+personal:
+- full_name
+- age_range
+- municipality
+- department
+- phone
+- email
+
+professional_summary
+
+job_goal:
+- desired_roles
+- desired_areas
+- availability
+- preferred_schedule
+- can_relocate
+
+education:
+- level
+- institution
+- status
+- year
+
+experience:
+- role
+- company_or_context
+- duration
+- tasks
+- achievements
+
+informal_experience
+
+skills:
+- technical
+- soft
+- tools
+- languages
+
+certifications_or_courses
+cv_gaps
+recommended_next_steps
+
+Workflow minimo de n8n
+----------------------
+1. Webhook node:
+   POST /webhook/trabajoya/create-candidate-profile
+
+2. Code node:
+   Validar que exista profile.personal.full_name.
+
+3. Postgres/Supabase node:
+   Insertar en candidate_profiles:
+   full_name = profile.personal.full_name
+   email = profile.personal.email
+   phone = profile.personal.phone
+   municipality = profile.personal.municipality
+   department = profile.personal.department
+   source = source
+   profile = profile
+   raw_cv_text = raw_cv_text
+   conversation_summary = conversation_summary
+
+4. Respond to Webhook:
+   Devolver:
+   {
+     "ok": true,
+     "candidate_id": "uuid-generado-en-postgres",
+     "message": "Perfil guardado. El siguiente paso es revisar recomendaciones de empleo."
+   }
+
+Ejemplos para seed/demo
+-----------------------
+Vacantes de ejemplo investigadas:
+- Auxiliar de tienda Walmart en San Salvador, Tecoloco.
+- Auxiliar de bodega / auxiliar de tienda en San Salvador, Computrabajo.
+- Auxiliar de tienda / auxiliar de bodega / auxiliar administrativo, Tecoloco.
+
+Cursos Platzi utiles:
+- Curso de Creacion de CV.
+- Curso para Preparar una Entrevista de Trabajo.
+- Curso para Mejorar tu Perfil Profesional.
+
+Pendientes para retomar
+-----------------------
+1. Agregar OCR para PDFs escaneados como imagen.
+2. Agregar recomendaciones de cursos/vacantes.
+3. Agregar manejo de errores amigable para payloads incompletos.
+4. Preparar deploy del cliente si deja de ser solo local.
+
+Credenciales que faltan
+-----------------------
+No guardar credenciales en el repo.
+
+Para conectar todo se necesitara:
+- ElevenLabs Voice ID, si se usa una voz especifica.
+
+Notas de seguridad
+------------------
+- No exponer PostgreSQL publicamente.
+- No guardar service role keys ni passwords en archivos del repo.
+- En n8n, usar credenciales seguras.
+- El frontend nunca debe tener service role key.
+
+Decision tecnica minima
+-----------------------
+La primera version operativa funciona con:
+n8n + Postgres + ElevenLabs webhook tool + cliente local.
+
+Ya existe un backend local pequeno en `trabajoya-client/server/index.mjs`.
+Sirve para leer perfiles guardados desde Postgres usando el tunel SSH local
+`localhost:15432`, sin exponer Postgres publicamente.
+
+El backend local se podra ampliar para:
+- Extraer CV en PDF con mas control.
+- Validar payloads con reglas mas estrictas.
+- Manejar autenticacion de usuarios.
+- Servir dashboard/frontend.
+- Calcular recomendaciones con logica propia.
+
+Estado cliente local
+--------------------
+- Ruta: `trabajoya-client`.
+- Frontend Vite: `http://127.0.0.1:5173/`.
+- API local: `http://127.0.0.1:8787/api/health`.
+- Deploy publico: `https://trabajoya.rivasystems.dev/`.
+- Deploy VPS: `/etc/dokploy/compose/trabajoya-client/code`.
+- Vista de perfiles lee `public.candidate_profiles`.
+- Registros iniciales:
+  - Tabla `public.candidate_intakes`.
+  - `POST /api/intakes` genera codigo corto y URL `/c/CODIGO`.
+  - `POST /api/intakes/:code/verify` valida telefono salvadoreno +503.
+  - `POST /api/candidate-profiles` guarda perfil final y enlaza `intake_code`.
+- Carga de CV:
+  - `POST /api/cv/extract`.
+  - Soporta PDF con texto seleccionable y TXT.
+  - PDFs escaneados como imagen quedan pendientes de OCR.
+  - La interfaz manda el texto extraido al agente con `sendContextualUpdate`.
+- Script rapido de prueba: `npm run test:webhook`.
+
+Estado agente ElevenLabs
+------------------------
+- Prompt ajustado para MVP: si el usuario ya dio datos suficientes y confirma,
+  guarda el perfil sin extender la conversacion.
+- La tool `create_candidate_profile` sigue adjunta al agente.
+- Tool actualizada para guardar en:
+  `https://trabajoya.rivasystems.dev/api/candidate-profiles`.
+- Si recibe `intake_code` desde el enlace verificado, debe mandarlo como campo
+  top-level al guardar.

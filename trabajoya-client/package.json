@@ -1,0 +1,27 @@
+{
+  "name": "trabajoya-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api": "node server/index.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "dev:full": "node scripts/dev-full.mjs",
+    "build": "vite build",
+    "migrate": "node scripts/migrate.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "start": "node server/index.mjs",
+    "test:webhook": "node scripts/post-test-profile.mjs"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "latest",
+    "express": "^5.2.1",
+    "lucide": "latest",
+    "multer": "^2.2.0",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}

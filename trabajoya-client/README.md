@@ -1,0 +1,140 @@
+# TrabajoYA Client
+
+Cliente local para probar el agente de voz de ElevenLabs.
+
+## Ejecutar
+
+```bash
+npm install
+npm run dev
+```
+
+Abrir la URL local que imprime Vite.
+
+## Ejecutar con dashboard
+
+Mantener abierto el tunel SSH a Postgres:
+
+```bash
+ssh -L 15432:127.0.0.1:15432 debian@<ip-del-vps>
+```
+
+Configurar la clave de DBeaver en una variable local:
+
+```bash
+export PGPASSWORD="la_clave_de_dbeaver"
+npm run dev:full
+```
+
+Tambien se puede crear `.env.local` desde `.env.example` y llenar
+`PGPASSWORD`. Ese archivo queda ignorado por git.
+
+URLs locales:
+
+```text
+Interfaz: http://127.0.0.1:5173/
+API: http://127.0.0.1:8787/api/health
+```
+
+## Registro inicial
+
+La app deployed corre en:
+
+```text
+https://trabajoya.rivasystems.dev/
+```
+
+Endpoints principales:
+
+```text
+POST /api/intakes
+POST /api/intakes/:code/verify
+POST /api/candidate-profiles
+GET  /api/intakes
+GET  /api/profiles
+```
+
+`POST /api/intakes` recibe telefono salvadoreno, datos iniciales y devuelve
+un codigo corto mas URL:
+
+```json
+{
+  "phone": "77778888",
+  "full_name": "Nombre inicial",
+  "municipality": "San Salvador",
+  "department": "San Salvador",
+  "desired_role": "Atencion al cliente"
+}
+```
+
+La URL del candidato queda en formato:
+
+```text
+https://trabajoya.rivasystems.dev/c/CODIGO
+```
+
+## Prueba rapida de guardado
+
+Para validar n8n + Postgres sin pasar por toda la conversacion:
+
+```bash
+npm run test:webhook
+```
+
+Luego refrescar `public.candidate_profiles` en DBeaver y buscar registros con
+`source = qa_local_script`.
+
+## CV
+
+La interfaz permite subir archivos `.pdf` y `.txt`.
+
+- PDF con texto seleccionable: extrae texto y paginas.
+- PDF escaneado como imagen: muestra error y queda pendiente OCR.
+- TXT: extrae el contenido directamente.
+
+Flujo:
+
+```text
+Subir CV -> Extraer -> Iniciar conversacion -> Enviar al agente
+```
+
+## Configuracion
+
+Por defecto usa:
+
+```text
+agent_3101kwq6aq0yfywbc4jyxqevv9zm
+```
+
+Para cambiarlo, crear un `.env.local`:
+
+```bash
+VITE_ELEVENLABS_AGENT_ID=agent_xxx
+```
+
+No guardar API keys en este cliente. Si el agente se vuelve privado, agregar un backend local que entregue signed URLs.
+
+## Deploy
+
+El deploy fullstack usa:
+
+```text
+Dockerfile
+docker-compose.dokploy.yml
+migrations/001_candidate_intakes.sql
+```
+
+Desde GitHub, Dokploy puede usar el `docker-compose.yml` que esta en la raiz
+del repo. Variables requeridas:
+
+```text
+TRABAJOYA_DOMAIN=trabajoya.rivasystems.dev
+PUBLIC_APP_URL=https://trabajoya.rivasystems.dev
+TRABAJOYA_DB_PASSWORD=...
+```
+
+En el VPS el compose esta en:
+
+```text
+/etc/dokploy/compose/trabajoya-client/code
+```

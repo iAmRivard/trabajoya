@@ -1,0 +1,38 @@
+services:
+  trabajoya:
+    build:
+      context: ./trabajoya-client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      API_PORT: 8787
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL}
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: trabajoya
+      PGUSER: trabajoya_dbeaver
+      PGPASSWORD: ${TRABAJOYA_DB_PASSWORD}
+      ALLOWED_ORIGIN: ${PUBLIC_APP_URL}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.trabajoya-web.entrypoints: web
+      traefik.http.routers.trabajoya-web.rule: Host(`${TRABAJOYA_DOMAIN}`)
+      traefik.http.routers.trabajoya-web.middlewares: redirect-to-https@file
+      traefik.http.routers.trabajoya-web.service: trabajoya-web
+      traefik.http.routers.trabajoya-websecure.entrypoints: websecure
+      traefik.http.routers.trabajoya-websecure.rule: Host(`${TRABAJOYA_DOMAIN}`)
+      traefik.http.routers.trabajoya-websecure.service: trabajoya-websecure
+      traefik.http.routers.trabajoya-websecure.tls.certresolver: letsencrypt
+      traefik.http.services.trabajoya-web.loadbalancer.server.port: "8787"
+      traefik.http.services.trabajoya-websecure.loadbalancer.server.port: "8787"
+    networks:
+      - dokploy-network
+      - n8n-n8nwithpostgres-wpwp8h
+
+networks:
+  dokploy-network:
+    external: true
+  n8n-n8nwithpostgres-wpwp8h:
+    external: true

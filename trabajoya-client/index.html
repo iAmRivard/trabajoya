@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrabajoYA</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-label="TrabajoYA">
+        <div class="identity">
+          <div class="mark" aria-hidden="true">
+            <span class="mark-line"></span>
+            <span class="mark-dot"></span>
+          </div>
+          <div>
+            <p class="eyebrow">Asesor laboral de voz</p>
+            <h1>TrabajoYA</h1>
+          </div>
+        </div>
+
+        <div class="status-strip" aria-live="polite">
+          <div class="status-item">
+            <i data-lucide="radio"></i>
+            <span id="connectionStatus">Desconectado</span>
+          </div>
+          <div class="status-item">
+            <i data-lucide="message-square"></i>
+            <span id="agentStatus">En espera</span>
+          </div>
+          <div class="status-item">
+            <i data-lucide="database"></i>
+            <span>n8n + Postgres</span>
+          </div>
+        </div>
+
+        <section id="candidateGate" class="candidate-gate" hidden>
+          <div>
+            <p class="eyebrow">Enlace de candidato</p>
+            <h2 id="candidateGateTitle">Verificar teléfono</h2>
+            <p id="candidateGateDetail">Ingresa el teléfono asociado a este código para completar el perfil.</p>
+          </div>
+          <form id="candidateVerifyForm" class="verify-form">
+            <input id="candidatePhoneInput" name="phone" type="tel" autocomplete="tel" placeholder="Ej. 77778888" />
+            <button id="candidateVerifyButton" type="submit">
+              <i data-lucide="check-circle"></i>
+              <span>Verificar</span>
+            </button>
+          </form>
+          <p id="candidateVerifyStatus" class="verify-status">Código pendiente</p>
+        </section>
+
+        <div class="voice-surface">
+          <div class="voice-orbit" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="session-copy">
+            <h2 id="sessionTitle">Listo para crear un perfil</h2>
+            <p id="sessionDetail">Perfil laboral en preparación.</p>
+          </div>
+        </div>
+
+        <section class="cv-panel" aria-label="CV">
+          <form id="cvForm" class="cv-form">
+            <label for="cvInput">CV</label>
+            <div class="cv-row">
+              <input id="cvInput" name="cv" type="file" accept=".pdf,.txt,application/pdf,text/plain" />
+              <button id="extractCvButton" type="submit">
+                <i data-lucide="file-text"></i>
+                <span>Extraer</span>
+              </button>
+              <button id="sendCvContextButton" type="button" disabled>
+                <i data-lucide="upload"></i>
+                <span>Enviar al agente</span>
+              </button>
+            </div>
+          </form>
+          <div class="cv-result">
+            <p id="cvStatus">Sin CV</p>
+            <pre id="cvPreview" hidden></pre>
+          </div>
+        </section>
+
+        <div class="controls" aria-label="Controles de conversación">
+          <button id="startButton" class="primary-action" type="button">
+            <i data-lucide="play"></i>
+            <span>Iniciar</span>
+          </button>
+          <button id="stopButton" type="button" disabled>
+            <i data-lucide="square"></i>
+            <span>Detener</span>
+          </button>
+          <button id="muteButton" type="button" disabled aria-pressed="false">
+            <i data-lucide="mic"></i>
+            <span>Micrófono</span>
+          </button>
+        </div>
+
+        <form id="textForm" class="text-composer">
+          <label for="textInput">Mensaje</label>
+          <div class="input-row">
+            <input id="textInput" name="message" type="text" autocomplete="off" placeholder="Escribir al agente" disabled />
+            <button id="sendButton" type="submit" disabled title="Enviar mensaje">
+              <i data-lucide="send"></i>
+              <span>Enviar</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="side-panel" aria-label="Panel de seguimiento">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Seguimiento</p>
+            <h2 id="panelTitle">Actividad</h2>
+          </div>
+          <button id="refreshProfilesButton" class="icon-action" type="button" title="Actualizar perfiles">
+            <i data-lucide="refresh-cw"></i>
+            <span>Actualizar</span>
+          </button>
+        </div>
+
+        <div class="panel-tabs" role="tablist" aria-label="Vistas">
+          <button id="activityTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="activityView">
+            <i data-lucide="shield-check"></i>
+            <span>Actividad</span>
+          </button>
+          <button id="intakesTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="intakesView">
+            <i data-lucide="user-plus"></i>
+            <span>Registros</span>
+            <strong id="intakeCount">0</strong>
+          </button>
+          <button id="profilesTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="profilesView">
+            <i data-lucide="users"></i>
+            <span>Perfiles</span>
+            <strong id="profileCount">0</strong>
+          </button>
+        </div>
+
+        <section id="activityView" class="panel-view" role="tabpanel" aria-labelledby="activityTab">
+          <ol id="eventLog" class="event-log"></ol>
+        </section>
+
+        <section id="intakesView" class="panel-view" role="tabpanel" aria-labelledby="intakesTab" hidden>
+          <form id="intakeForm" class="intake-form">
+            <label for="intakePhoneInput">Teléfono</label>
+            <input id="intakePhoneInput" name="phone" type="tel" autocomplete="tel" placeholder="Ej. 77778888" required />
+            <label for="intakeNameInput">Nombre</label>
+            <input id="intakeNameInput" name="full_name" type="text" autocomplete="name" placeholder="Nombre inicial" />
+            <label for="intakeRoleInput">Puesto buscado</label>
+            <input id="intakeRoleInput" name="desired_role" type="text" placeholder="Atención al cliente" />
+            <div class="split-fields">
+              <input id="intakeMunicipalityInput" name="municipality" type="text" placeholder="Municipio" />
+              <input id="intakeDepartmentInput" name="department" type="text" placeholder="Departamento" />
+            </div>
+            <button id="createIntakeButton" class="primary-action" type="submit">
+              <i data-lucide="link"></i>
+              <span>Crear enlace</span>
+            </button>
+          </form>
+          <div id="intakeResult" class="intake-result" hidden>
+            <input id="intakeUrlOutput" type="text" readonly />
+            <button id="copyIntakeUrlButton" type="button">
+              <i data-lucide="copy"></i>
+              <span>Copiar</span>
+            </button>
+          </div>
+          <p id="intakesStatus" class="profiles-status">Sin cargar</p>
+          <div id="intakesList" class="profiles-list"></div>
+        </section>
+
+        <section id="profilesView" class="panel-view" role="tabpanel" aria-labelledby="profilesTab" hidden>
+          <p id="profilesStatus" class="profiles-status">Sin cargar</p>
+          <div id="profilesList" class="profiles-list"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
