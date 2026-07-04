@@ -638,6 +638,10 @@ function buildIntakeContext(intake) {
       : 'No hay CV previo registrado para este enlace.',
     'Instrucciones:',
     '- Arranca demostrando que ya conoces estos datos iniciales.',
+    '- Usa modo entrevista breve: pregunta solo un dato por turno.',
+    '- Si faltan varios datos, elige el siguiente mas importante y espera respuesta antes de continuar.',
+    '- Orden sugerido: nombre, ubicacion, objetivo laboral, experiencia principal, disponibilidad, habilidades, estudios/cursos.',
+    '- No hagas listas largas de preguntas. Evita frases como "decime nombre, edad, experiencia y estudios".',
     '- Confirma o completa solo lo que falte para guardar el perfil laboral.',
     '- Cuando guardes el perfil final, incluye este intake_code en el payload de la herramienta.',
     '- Despues de guardar el perfil, despídete en una frase corta. La interfaz cerrara la llamada automaticamente.',
@@ -780,7 +784,8 @@ function sendCvContextToAgent() {
   const context = [
     `CV cargado: ${fileName}`,
     'Usa este texto como contexto para crear o completar el perfil laboral.',
-    'No inventes datos. Si falta algo importante, pregunta solo eso.',
+    'No inventes datos. Si falta algo importante, pregunta solo un dato por turno.',
+    'Evita pedir listas de informacion; guia la entrevista paso a paso.',
     'Texto extraido:',
     extractedCv.text,
   ].join('\n\n');
