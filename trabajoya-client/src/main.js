@@ -90,6 +90,7 @@ let intakesLoaded = false;
 let extractedCv = null;
 let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
+let candidateAutoEndTimer = null;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -610,13 +611,20 @@ async function verifyCandidate(event) {
   }
 }
 
-function sendIntakeContextToAgent() {
-  if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
+function limitAgentContextText(text, maxLength = 8000) {
+  const value = String(text || '').trim();
 
-  const intake = candidateSession.intake;
+  if (value.length <= maxLength) return value;
+
+  return `${value.slice(0, maxLength)}\n\n[Texto recortado para iniciar la conversacion]`;
+}
+
+function buildIntakeContext(intake) {
   const initialData = intake.initial_data || {};
-  const cvText = initialData.cv_text || '';
-  const context = [
+  const cvText = limitAgentContextText(initialData.cv_text || '');
+
+  return [
+    'CONTEXTO INICIAL DEL CANDIDATO. No leas este bloque completo en voz alta; usalo para guiar la conversacion.',
     `Registro inicial TrabajoYA: ${intake.code}`,
     `intake_code: ${intake.code}`,
     `Telefono verificado: ${intake.phone}`,
@@ -628,20 +636,99 @@ function sendIntakeContextToAgent() {
     cvText
       ? `CV o perfil previo enviado por WhatsApp:\n${cvText}`
       : 'No hay CV previo registrado para este enlace.',
-    'Cuando guardes el perfil final, incluye este intake_code en el payload de la herramienta.',
-    cvText ? 'Usa el CV previo como contexto base y confirma solo la informacion clave antes de guardar.' : '',
-    'Pregunta solo lo que falte para completar el perfil laboral.',
+    'Instrucciones:',
+    '- Arranca demostrando que ya conoces estos datos iniciales.',
+    '- Confirma o completa solo lo que falte para guardar el perfil laboral.',
+    '- Cuando guardes el perfil final, incluye este intake_code en el payload de la herramienta.',
+    '- Despues de guardar el perfil, despídete en una frase corta. La interfaz cerrara la llamada automaticamente.',
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+function buildCandidateFirstMessage(intake) {
+  const hasCv = Boolean(intake.initial_data?.cv_text);
+  const name = intake.full_name ? `, ${intake.full_name}` : '';
+  const role = intake.desired_role ? ` para ${intake.desired_role}` : '';
+
+  return hasCv
+    ? `Hola${name}. Ya tengo tu registro inicial${role} y el CV que enviaste por WhatsApp. Voy a confirmar lo clave y completar solo lo que falte.`
+    : `Hola${name}. Ya tengo tu registro inicial${role}. Voy a confirmar lo clave y completar solo lo que falte.`;
+}
+
+function buildCandidateDynamicVariables() {
+  const intake = candidateSession?.intake;
+
+  if (!intake) return undefined;
+
+  const initialData = intake.initial_data || {};
+
+  return {
+    intake_code: intake.code,
+    candidate_name: intake.full_name || '',
+    candidate_phone: intake.phone || '',
+    candidate_municipality: intake.municipality || '',
+    candidate_department: intake.department || '',
+    candidate_desired_role: intake.desired_role || '',
+    candidate_notes: initialData.notes || '',
+    candidate_cv_text: limitAgentContextText(initialData.cv_text || '', 6000),
+  };
+}
+
+function sendIntakeContextToAgent() {
+  if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
+
+  const intake = candidateSession.intake;
+  const context = buildIntakeContext(intake);
 
   candidateSession.contextSent = true;
   conversation.sendContextualUpdate(context, { contextId: `intake_${intake.code}` });
-  conversation.sendUserMessage(
-    'Ya verifique mi telefono. Usa mis datos iniciales para completar mi perfil laboral.',
+
+  window.setTimeout(() => {
+    if (!conversation || !candidateSession?.intake) return;
+
+    conversation.sendUserMessage(
+      `${context}\n\nMensaje del candidato: Ya verifique mi telefono. Usa este contexto inicial para completar mi perfil laboral.`,
+    );
+    conversation.sendUserActivity();
+  }, 350);
+
+  addEvent(
+    'system',
+    intake.initial_data?.cv_text ? 'Datos iniciales y CV enviados al agente.' : 'Datos iniciales enviados al agente.',
   );
-  conversation.sendUserActivity();
-  addEvent('system', cvText ? 'Datos iniciales y CV enviados al agente.' : 'Datos iniciales enviados al agente.');
+}
+
+function isProfileSaveToolResponse(toolResponse) {
+  const toolName = String(toolResponse?.tool_name || toolResponse?.toolName || toolResponse?.name || '').trim();
+
+  return !toolName || toolName === 'create_candidate_profile';
+}
+
+function scheduleCandidateConversationEnd() {
+  if (!candidateSession?.intake || candidateAutoEndTimer) return;
+
+  setCandidateVerifyStatus('Perfil guardado. Cerrando conversación...');
+  elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará automáticamente.';
+  addEvent('system', 'Perfil guardado; cerraré la conversación en unos segundos.');
+
+  candidateAutoEndTimer = window.setTimeout(async () => {
+    candidateAutoEndTimer = null;
+
+    if (!conversation) return;
+
+    await stopConversation();
+    setCandidateVerifyStatus('Perfil guardado. Conversación finalizada.');
+    elements.sessionTitle.textContent = 'Perfil completado';
+    elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente.';
+  }, 6500);
+}
+
+function clearCandidateAutoEndTimer() {
+  if (!candidateAutoEndTimer) return;
+
+  window.clearTimeout(candidateAutoEndTimer);
+  candidateAutoEndTimer = null;
 }
 
 async function extractCv(event) {
@@ -724,15 +811,16 @@ async function startConversation() {
 
     await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    conversation = await Conversation.startSession({
+    const sessionOptions = {
       agentId: AGENT_ID,
       connectionType: 'webrtc',
       onConnect: ({ conversationId }) => {
         setConnectedState(true);
         addEvent('system', `Conexión iniciada: ${conversationId}`);
-        queueMicrotask(sendIntakeContextToAgent);
+        window.setTimeout(sendIntakeContextToAgent, 700);
       },
       onDisconnect: () => {
+        clearCandidateAutoEndTimer();
         conversation = null;
         setConnectedState(false);
         addEvent('system', 'Conexión finalizada.');
@@ -751,14 +839,28 @@ async function startConversation() {
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
         }
       },
-      onAgentToolResponse: () => {
+      onAgentToolResponse: (toolResponse) => {
         addEvent('system', 'Perfil procesado por la herramienta de guardado.');
         profilesLoaded = false;
         if (adminAuthenticated) {
           fetchProfiles();
         }
+        if (candidateSession?.intake && isProfileSaveToolResponse(toolResponse)) {
+          scheduleCandidateConversationEnd();
+        }
       },
-    });
+    };
+
+    if (candidateSession?.intake) {
+      sessionOptions.dynamicVariables = buildCandidateDynamicVariables();
+      sessionOptions.overrides = {
+        agent: {
+          firstMessage: buildCandidateFirstMessage(candidateSession.intake),
+        },
+      };
+    }
+
+    conversation = await Conversation.startSession(sessionOptions);
   } catch (error) {
     conversation = null;
     setConnectedState(false);
@@ -768,6 +870,7 @@ async function startConversation() {
 
 async function stopConversation() {
   if (!conversation) return;
+  clearCandidateAutoEndTimer();
   const activeConversation = conversation;
   conversation = null;
   await activeConversation.endSession();
