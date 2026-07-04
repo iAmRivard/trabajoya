@@ -184,8 +184,8 @@ TRABAJOYA_INTAKE_API_KEY=...
 ```
 
 El script `npm run migrate` aplica todos los archivos `.sql` en
-`migrations/` en orden alfabetico. En Docker, `npm run start` ejecuta
-migraciones antes de levantar el servidor.
+`migrations/` en orden alfabetico. En produccion, aplicarlo con un usuario de
+Postgres que tenga permisos de DDL antes de usar nuevos datasets.
 
 En el VPS el compose esta en:
 
