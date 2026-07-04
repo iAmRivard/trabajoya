@@ -29,7 +29,7 @@ const upload = multer({
 let pool;
 
 app.set('trust proxy', true);
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use((request, response, next) => {
   response.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Trabajoya-Key');
@@ -255,6 +255,51 @@ app.post('/api/candidate-profiles', async (request, response) => {
   }
 });
 
+app.post('/api/datasets/courses/upsert', requireDatasetWriter, async (request, response) => {
+  try {
+    const db = getPool();
+    const courses = getCoursePayloads(request.body);
+    const source = cleanText(request.body.source) || cleanText(request.body.sync?.source) || '';
+    const syncMetadata = request.body.sync && typeof request.body.sync === 'object' ? request.body.sync : {};
+    const saved = [];
+
+    if (courses.length === 0) {
+      response.status(400).json({
+        ok: false,
+        error: 'Envia al menos un curso en courses.',
+      });
+      return;
+    }
+
+    for (const course of courses.slice(0, 250)) {
+      const normalizedCourse = normalizeCoursePayload(course, source);
+      const result = await upsertCourse(db, normalizedCourse);
+      saved.push(result);
+    }
+
+    await recordDatasetSyncRun(db, {
+      dataset: 'courses',
+      source: source || 'mixed',
+      itemsSeen: courses.length,
+      itemsUpserted: saved.length,
+      metadata: syncMetadata,
+    });
+
+    response.json({
+      ok: true,
+      dataset: 'courses',
+      received: courses.length,
+      upserted: saved.length,
+      courses: saved,
+    });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
 app.post('/api/cv/extract', upload.single('cv'), async (request, response) => {
   try {
     if (!request.file) {
@@ -330,6 +375,56 @@ app.get('/api/profiles', requireAdminSession, async (request, response) => {
     response.json({
       ok: true,
       profiles: result.rows,
+    });
+  } catch (error) {
+    response.status(503).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/courses', requireAdminSession, async (request, response) => {
+  const limit = clampNumber(Number(request.query.limit || 50), 1, 200);
+  const source = cleanText(request.query.source);
+  const status = cleanText(request.query.status || 'active');
+  const query = cleanText(request.query.q);
+  const filters = [];
+  const values = [];
+
+  if (source) {
+    values.push(source);
+    filters.push(`source = $${values.length}`);
+  }
+
+  if (status && status !== 'all') {
+    values.push(status);
+    filters.push(`status = $${values.length}`);
+  }
+
+  if (query) {
+    values.push(`%${query}%`);
+    filters.push(`(title ilike $${values.length} or provider ilike $${values.length} or description ilike $${values.length})`);
+  }
+
+  values.push(limit);
+
+  try {
+    const db = getPool();
+    const result = await db.query(
+      `
+      select *
+      from public.courses
+      ${filters.length > 0 ? `where ${filters.join(' and ')}` : ''}
+      order by last_seen_at desc, updated_at desc
+      limit $${values.length}
+      `,
+      values,
+    );
+
+    response.json({
+      ok: true,
+      courses: result.rows,
     });
   } catch (error) {
     response.status(503).json({
@@ -496,6 +591,191 @@ async function findIntakeByCode(db, code) {
   return result.rows[0];
 }
 
+function getCoursePayloads(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.courses)) return body.courses;
+  if (Array.isArray(body?.items)) return body.items;
+  if (body?.course && typeof body.course === 'object') return [body.course];
+  if (body && typeof body === 'object') return [body];
+  return [];
+}
+
+function normalizeCoursePayload(course, fallbackSource = '') {
+  const source = cleanText(course.source || fallbackSource || 'exa');
+  const provider = cleanText(course.provider || course.organization || course.institution || source);
+  const title = cleanText(course.title || course.name || course.course_title);
+  const sourceUrl = cleanText(course.source_url || course.url || course.link);
+  const externalId =
+    cleanText(course.external_id || course.externalId || course.id || course.slug) ||
+    createStableExternalId(source, title, sourceUrl);
+  const cost = parseOptionalNumber(course.cost ?? course.price);
+  const isFree =
+    parseOptionalBoolean(course.is_free ?? course.free ?? course.isFree) ??
+    (cost === 0 ? true : undefined);
+
+  if (!title) {
+    throw new Error('missing_course_title');
+  }
+
+  return {
+    source,
+    external_id: externalId,
+    provider,
+    title,
+    area: cleanText(course.area || course.category || course.topic),
+    description: limitChars(cleanText(course.description || course.summary || course.text), 4000),
+    modality: cleanText(course.modality || course.mode || course.format),
+    country: cleanText(course.country) || 'El Salvador',
+    department: cleanText(course.department || course.state),
+    municipality: cleanText(course.municipality || course.city),
+    is_free: isFree ?? null,
+    cost,
+    currency: cleanText(course.currency) || 'USD',
+    duration_hours: parseOptionalInteger(course.duration_hours ?? course.durationHours ?? course.hours),
+    schedule: cleanText(course.schedule || course.timetable),
+    start_date: parseOptionalDate(course.start_date || course.startDate),
+    end_date: parseOptionalDate(course.end_date || course.endDate),
+    level: cleanText(course.level),
+    requirements: normalizeTextArray(course.requirements),
+    skills: normalizeTextArray(course.skills),
+    target_roles: normalizeTextArray(course.target_roles || course.targetRoles || course.roles),
+    certificate: parseOptionalBoolean(course.certificate ?? course.has_certificate ?? course.hasCertificate) ?? null,
+    source_url: sourceUrl,
+    status: normalizeCourseStatus(course.status),
+    raw: course,
+  };
+}
+
+async function upsertCourse(db, course) {
+  const contentHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        ...course,
+        raw: undefined,
+      }),
+    )
+    .digest('hex');
+  const values = [
+    course.source,
+    course.external_id,
+    course.provider,
+    course.title,
+    course.area,
+    course.description,
+    course.modality,
+    course.country,
+    course.department,
+    course.municipality,
+    course.is_free,
+    course.cost,
+    course.currency,
+    course.duration_hours,
+    course.schedule,
+    course.start_date,
+    course.end_date,
+    course.level,
+    JSON.stringify(course.requirements),
+    JSON.stringify(course.skills),
+    JSON.stringify(course.target_roles),
+    course.certificate,
+    course.source_url,
+    course.status,
+    JSON.stringify(course.raw),
+    contentHash,
+  ];
+  const result = await db.query(
+    `
+    insert into public.courses (
+      source,
+      external_id,
+      provider,
+      title,
+      area,
+      description,
+      modality,
+      country,
+      department,
+      municipality,
+      is_free,
+      cost,
+      currency,
+      duration_hours,
+      schedule,
+      start_date,
+      end_date,
+      level,
+      requirements,
+      skills,
+      target_roles,
+      certificate,
+      source_url,
+      status,
+      raw,
+      content_hash
+    )
+    values (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+      $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb,
+      $21::jsonb, $22, $23, $24, $25::jsonb, $26
+    )
+    on conflict (source, external_id)
+    do update set
+      provider = excluded.provider,
+      title = excluded.title,
+      area = excluded.area,
+      description = excluded.description,
+      modality = excluded.modality,
+      country = excluded.country,
+      department = excluded.department,
+      municipality = excluded.municipality,
+      is_free = excluded.is_free,
+      cost = excluded.cost,
+      currency = excluded.currency,
+      duration_hours = excluded.duration_hours,
+      schedule = excluded.schedule,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      level = excluded.level,
+      requirements = excluded.requirements,
+      skills = excluded.skills,
+      target_roles = excluded.target_roles,
+      certificate = excluded.certificate,
+      source_url = excluded.source_url,
+      status = excluded.status,
+      raw = excluded.raw,
+      content_hash = excluded.content_hash,
+      last_seen_at = now()
+    returning id, source, external_id, title, provider, status, source_url, updated_at
+    `,
+    values,
+  );
+
+  return result.rows[0];
+}
+
+async function recordDatasetSyncRun(db, { dataset, source, itemsSeen, itemsUpserted, metadata }) {
+  await db.query(
+    `
+    insert into public.dataset_sync_runs (
+      dataset,
+      source,
+      status,
+      items_seen,
+      items_upserted,
+      metadata
+    )
+    values ($1, $2, 'completed', $3, $4, $5::jsonb)
+    `,
+    [
+      dataset,
+      source,
+      itemsSeen,
+      itemsUpserted,
+      JSON.stringify(metadata || {}),
+    ],
+  );
+}
+
 function requireAdminSession(request, response, next) {
   if (isAdminRequest(request)) {
     next();
@@ -520,6 +800,18 @@ function requireIntakeCreator(request, response, next) {
   });
 }
 
+function requireDatasetWriter(request, response, next) {
+  if (isAdminRequest(request) || hasValidDatasetApiKey(request)) {
+    next();
+    return;
+  }
+
+  response.status(401).json({
+    ok: false,
+    error: 'API key requerida para sincronizar datasets.',
+  });
+}
+
 function isAdminAuthConfigured() {
   return Boolean(getAdminPassword() && getSessionSecret());
 }
@@ -531,6 +823,13 @@ function isAdminRequest(request) {
 
 function hasValidIntakeApiKey(request) {
   const expectedKey = getIntakeApiKey();
+  const providedKey = getApiKeyFromRequest(request);
+
+  return Boolean(expectedKey && providedKey && timingSafeTextEqual(providedKey, expectedKey));
+}
+
+function hasValidDatasetApiKey(request) {
+  const expectedKey = getDatasetApiKey();
   const providedKey = getApiKeyFromRequest(request);
 
   return Boolean(expectedKey && providedKey && timingSafeTextEqual(providedKey, expectedKey));
@@ -559,6 +858,15 @@ function getSessionSecret() {
 
 function getIntakeApiKey() {
   return cleanText(process.env.TRABAJOYA_INTAKE_API_KEY || process.env.INTAKE_API_KEY);
+}
+
+function getDatasetApiKey() {
+  return cleanText(
+    process.env.TRABAJOYA_DATASET_API_KEY ||
+      process.env.DATASET_API_KEY ||
+      process.env.TRABAJOYA_INTAKE_API_KEY ||
+      process.env.INTAKE_API_KEY,
+  );
 }
 
 function setAdminSessionCookie(response) {
@@ -692,6 +1000,10 @@ function getPublicError(error) {
     return 'El codigo de registro no existe.';
   }
 
+  if (error?.message === 'missing_course_title') {
+    return 'Cada curso necesita titulo.';
+  }
+
   return error?.message || 'No se pudo conectar a Postgres.';
 }
 
@@ -751,6 +1063,91 @@ function normalizePhoneSV(value) {
 function cleanText(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function limitChars(text, maxLength) {
+  const value = cleanText(text);
+
+  if (value.length <= maxLength) return value;
+
+  return value.slice(0, maxLength);
+}
+
+function normalizeTextArray(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : cleanText(value)
+      ? cleanText(value).split(/[,;\n]/)
+      : [];
+  const seen = new Set();
+  const normalized = [];
+
+  for (const item of rawValues) {
+    const text = cleanText(typeof item === 'object' ? item?.name || item?.title || item?.value : item);
+    const key = text.toLowerCase();
+
+    if (!text || seen.has(key)) continue;
+
+    seen.add(key);
+    normalized.push(text);
+  }
+
+  return normalized.slice(0, 50);
+}
+
+function parseOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(String(value).replace(/[^0-9.-]/g, ''));
+
+  return Number.isFinite(number) ? number : null;
+}
+
+function parseOptionalInteger(value) {
+  const number = parseOptionalNumber(value);
+
+  return Number.isFinite(number) ? Math.trunc(number) : null;
+}
+
+function parseOptionalBoolean(value) {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+
+  const text = cleanText(value).toLowerCase();
+
+  if (['true', 'si', 'sí', 'yes', 'gratis', 'free', 'gratuito', '1'].includes(text)) return true;
+  if (['false', 'no', '0', 'pagado', 'paid'].includes(text)) return false;
+
+  return undefined;
+}
+
+function parseOptionalDate(value) {
+  const text = cleanText(value);
+
+  if (!text) return null;
+
+  const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+
+  if (isoMatch) return isoMatch[0];
+
+  const parsed = Date.parse(text);
+
+  if (Number.isNaN(parsed)) return null;
+
+  return new Date(parsed).toISOString().slice(0, 10);
+}
+
+function normalizeCourseStatus(value) {
+  const status = cleanText(value).toLowerCase();
+  const allowedStatuses = ['active', 'inactive', 'archived', 'draft'];
+
+  return allowedStatuses.includes(status) ? status : 'active';
+}
+
+function createStableExternalId(source, title, sourceUrl) {
+  const input = [source, title, sourceUrl].filter(Boolean).join('|') || String(Date.now());
+
+  return createHash('sha256').update(input).digest('hex').slice(0, 24);
 }
 
 function buildInitialData(body) {

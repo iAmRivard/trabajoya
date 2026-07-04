@@ -1,11 +1,11 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
 const { Pool } = pg;
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-const migration = await readFile(join(rootDir, 'migrations/001_candidate_intakes.sql'), 'utf8');
+const migrationsDir = join(rootDir, 'migrations');
 
 const pool = new Pool(
   process.env.DATABASE_URL
@@ -20,8 +20,13 @@ const pool = new Pool(
 );
 
 try {
-  await pool.query(migration);
-  console.log('Migracion aplicada: candidate_intakes');
+  const files = (await readdir(migrationsDir)).filter((file) => file.endsWith('.sql')).sort();
+
+  for (const file of files) {
+    const migration = await readFile(join(migrationsDir, file), 'utf8');
+    await pool.query(migration);
+    console.log(`Migracion aplicada: ${file}`);
+  }
 } finally {
   await pool.end();
 }

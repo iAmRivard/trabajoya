@@ -24,6 +24,7 @@
         "base_url": "https://trabajoya.rivasystems.dev",
         "admin_password": "PEGAR_CLAVE_ADMIN",
         "intake_api_key": "PEGAR_API_KEY_WHATSAPP",
+        "dataset_api_key": "PEGAR_API_KEY_DATASETS_O_USAR_LA_MISMA",
         "intake_code": "PEGAR_CODIGO_GENERADO",
         "candidate_phone": "77778888"
       },
@@ -32,6 +33,7 @@
           "base_url",
           "admin_password",
           "intake_api_key",
+          "dataset_api_key",
           "intake_code",
           "candidate_phone"
         ]
@@ -96,6 +98,18 @@
       "environment": {},
       "environmentPropertyOrder": null,
       "metaSortKey": -700,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_datasets",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Datasets",
+      "description": "Sincronizacion de cursos y futuros catalogos.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -650,
       "_type": "request_group"
     },
     {
@@ -358,6 +372,67 @@
       ],
       "authentication": {},
       "metaSortKey": -690,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_courses_upsert",
+      "parentId": "fld_datasets",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/datasets/courses/upsert",
+      "name": "Upsert curso demo",
+      "description": "Prueba el endpoint que usara n8n para guardar cursos.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"source\": \"insomnia_demo\",\n  \"sync\": {\n    \"provider\": \"QA Dataset\",\n    \"query\": \"curso demo\",\n    \"ran_at\": \"2026-07-04T12:00:00.000Z\"\n  },\n  \"courses\": [\n    {\n      \"source\": \"insomnia_demo\",\n      \"provider\": \"QA Dataset\",\n      \"title\": \"Curso demo de atencion al cliente\",\n      \"area\": \"Ventas\",\n      \"description\": \"Curso de prueba para validar upsert de datasets.\",\n      \"modality\": \"online\",\n      \"country\": \"El Salvador\",\n      \"is_free\": true,\n      \"cost\": 0,\n      \"currency\": \"USD\",\n      \"duration_hours\": 8,\n      \"skills\": [\"Atencion al cliente\", \"Comunicacion\"],\n      \"target_roles\": [\"Auxiliar de tienda\", \"Asesor de servicio\"],\n      \"source_url\": \"https://example.com/curso-demo\",\n      \"status\": \"active\"\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "X-Trabajoya-Key",
+          "value": "{{ _.dataset_api_key }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -650,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_courses_list",
+      "parentId": "fld_datasets",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/courses",
+      "name": "Listar cursos admin",
+      "description": "Requiere login admin previo.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "50",
+          "disabled": false
+        },
+        {
+          "name": "source",
+          "value": "",
+          "disabled": true
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -640,
       "isPrivate": false,
       "settingStoreCookies": true,
       "settingSendCookies": true,

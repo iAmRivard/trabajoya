@@ -51,6 +51,8 @@ POST /api/intakes
 GET  /api/intakes/:code
 POST /api/intakes/:code/verify
 POST /api/candidate-profiles
+POST /api/datasets/courses/upsert
+GET  /api/courses
 GET  /api/intakes
 GET  /api/profiles
 ```
@@ -90,6 +92,33 @@ inicial, el `intake_code` y el `cv_text` guardado para que retome ese contexto.
 
 `POST /api/intakes/:code/verify` queda por compatibilidad con versiones
 anteriores del flujo.
+
+## Datasets de cursos
+
+El MVP de cursos usa Exa + n8n para sincronizar fuentes publicas hacia
+Postgres:
+
+```text
+n8n -> Exa /search -> POST /api/datasets/courses/upsert -> public.courses
+```
+
+El workflow importable esta en:
+
+```text
+../contexto/n8n/trabajoya_courses_exa_sync.json
+```
+
+Documentacion:
+
+```text
+../contexto/docs/datasets-cursos-exa-n8n.md
+```
+
+`POST /api/datasets/courses/upsert` requiere sesion admin o:
+
+```http
+X-Trabajoya-Key: <TRABAJOYA_INTAKE_API_KEY>
+```
 
 ## Prueba rapida de guardado
 
@@ -153,6 +182,10 @@ TRABAJOYA_ADMIN_PASSWORD=...
 TRABAJOYA_SESSION_SECRET=...
 TRABAJOYA_INTAKE_API_KEY=...
 ```
+
+El script `npm run migrate` aplica todos los archivos `.sql` en
+`migrations/` en orden alfabetico. En Docker, `npm run start` ejecuta
+migraciones antes de levantar el servidor.
 
 En el VPS el compose esta en:
 

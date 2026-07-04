@@ -16,6 +16,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY server ./server
+COPY scripts ./scripts
 COPY migrations ./migrations
 EXPOSE 8787
 CMD ["npm", "run", "start"]

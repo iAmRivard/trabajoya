@@ -18,6 +18,7 @@ services:
       TRABAJOYA_ADMIN_PASSWORD: ${TRABAJOYA_ADMIN_PASSWORD}
       TRABAJOYA_SESSION_SECRET: ${TRABAJOYA_SESSION_SECRET}
       TRABAJOYA_INTAKE_API_KEY: ${TRABAJOYA_INTAKE_API_KEY}
+      TRABAJOYA_DATASET_API_KEY: ${TRABAJOYA_DATASET_API_KEY:-}
     labels:
       traefik.enable: "true"
       traefik.http.routers.trabajoya-web.entrypoints: web
