@@ -91,7 +91,6 @@ let extractedCv = null;
 let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
 let candidateAutoEndTimer = null;
-let suppressInitialContextEcho = false;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -647,31 +646,6 @@ function buildIntakeContext(intake) {
     .join('\n');
 }
 
-function buildCandidateFirstMessage(intake) {
-  const hasCv = Boolean(intake.initial_data?.cv_text);
-  const name = intake.full_name ? `, ${intake.full_name}` : '';
-  const role = intake.desired_role ? ` para ${intake.desired_role}` : '';
-  const location = [intake.municipality, intake.department].filter(Boolean).join(', ');
-  const place = location ? ` en ${location}` : '';
-
-  return hasCv
-    ? `Hola${name}. Ya tengo tu registro inicial${role}${place} y el CV que enviaste por WhatsApp. Voy a confirmar lo clave y completar solo lo que falte.`
-    : `Hola${name}. Ya tengo tu registro inicial${role}${place}. Voy a confirmar lo clave y completar solo lo que falte.`;
-}
-
-function buildCandidatePromptOverride(intake) {
-  return [
-    'Sos TrabajoYa, un asesor laboral de voz para ciudadanos de El Salvador.',
-    'Objetivo: crear un perfil laboral tipo CV de forma breve, amable y practica.',
-    'Reglas: no prometas empleo; no pidas DUI ni datos sensibles; no preguntes religion, genero, salud, politica ni datos financieros; hace una pregunta a la vez.',
-    'Usa el contexto inicial verificado. No pidas de nuevo lo que ya viene ahi. Si hay CV previo, usalo como base y confirma solo lo clave.',
-    'Cuando el usuario confirme, llama create_candidate_profile. Inclui intake_code como campo top-level.',
-    'Despues de guardar el perfil, despídete en una frase corta; la interfaz cerrara la llamada.',
-    '',
-    buildIntakeContext(intake),
-  ].join('\n');
-}
-
 function buildCandidateDynamicVariables() {
   const intake = candidateSession?.intake;
 
@@ -691,16 +665,19 @@ function buildCandidateDynamicVariables() {
   };
 }
 
-function markIntakeContextIncluded() {
-  if (!candidateSession?.intake || candidateSession.contextSent) return;
+function sendInitialIntakeContext() {
+  if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
 
   const intake = candidateSession.intake;
+  conversation.sendContextualUpdate(buildIntakeContext(intake), {
+    contextId: `intake_${intake.code}`,
+  });
   candidateSession.contextSent = true;
   addEvent(
     'system',
     intake.initial_data?.cv_text
-      ? 'Contexto inicial y CV incluidos al iniciar el agente.'
-      : 'Contexto inicial incluido al iniciar el agente.',
+      ? 'Contexto inicial y CV enviados al agente.'
+      : 'Contexto inicial enviado al agente.',
   );
 }
 
@@ -829,10 +806,13 @@ async function startConversation() {
     const sessionOptions = {
       agentId: AGENT_ID,
       connectionType: 'webrtc',
+      onConversationCreated: (createdConversation) => {
+        conversation = createdConversation;
+      },
       onConnect: ({ conversationId }) => {
         setConnectedState(true);
         addEvent('system', `Conexión iniciada: ${conversationId}`);
-        markIntakeContextIncluded();
+        window.setTimeout(sendInitialIntakeContext, 700);
       },
       onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
@@ -851,14 +831,6 @@ async function startConversation() {
       },
       onMessage: (message) => {
         if (message?.message) {
-          if (message.source === 'user' && suppressInitialContextEcho) {
-            suppressInitialContextEcho = false;
-
-            if (message.message.startsWith('CONTEXTO INICIAL DEL CANDIDATO')) {
-              return;
-            }
-          }
-
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
         }
       },
@@ -875,15 +847,8 @@ async function startConversation() {
     };
 
     if (candidateSession?.intake) {
+      candidateSession.contextSent = false;
       sessionOptions.dynamicVariables = buildCandidateDynamicVariables();
-      sessionOptions.overrides = {
-        agent: {
-          prompt: {
-            prompt: buildCandidatePromptOverride(candidateSession.intake),
-          },
-          firstMessage: buildCandidateFirstMessage(candidateSession.intake),
-        },
-      };
     }
 
     conversation = await Conversation.startSession(sessionOptions);
