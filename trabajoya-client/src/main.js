@@ -691,8 +691,8 @@ function buildCandidateDynamicVariables() {
   };
 }
 
-function sendIntakeContextToAgent() {
-  if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
+function markIntakeContextIncluded() {
+  if (!candidateSession?.intake || candidateSession.contextSent) return;
 
   const intake = candidateSession.intake;
   candidateSession.contextSent = true;
@@ -832,7 +832,7 @@ async function startConversation() {
       onConnect: ({ conversationId }) => {
         setConnectedState(true);
         addEvent('system', `Conexión iniciada: ${conversationId}`);
-        sendIntakeContextToAgent();
+        markIntakeContextIncluded();
       },
       onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
@@ -878,7 +878,9 @@ async function startConversation() {
       sessionOptions.dynamicVariables = buildCandidateDynamicVariables();
       sessionOptions.overrides = {
         agent: {
-          prompt: buildCandidatePromptOverride(candidateSession.intake),
+          prompt: {
+            prompt: buildCandidatePromptOverride(candidateSession.intake),
+          },
           firstMessage: buildCandidateFirstMessage(candidateSession.intake),
         },
       };
