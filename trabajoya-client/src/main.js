@@ -754,6 +754,7 @@ function isProfileSaveToolResponse(toolResponse) {
 function requestCandidateConversationEnd() {
   if (!candidateSession?.intake || candidateCloseAfterSave) return;
 
+  sendPostSaveClosureInstruction();
   candidateCloseAfterSave = true;
   candidateSaveCompletedAt = Date.now();
   candidateFinalAgentMessageAt = 0;
@@ -762,6 +763,20 @@ function requestCandidateConversationEnd() {
   elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará cuando el agente termine de hablar.';
   addEvent('system', 'Perfil guardado; esperaré a que el agente termine de hablar.');
   scheduleCandidateAutoEndCheck(22000);
+}
+
+function sendPostSaveClosureInstruction() {
+  if (!conversation || !candidateSession?.intake) return;
+
+  conversation.sendContextualUpdate(
+    [
+      'El perfil ya fue guardado correctamente.',
+      'No hagas mas preguntas ni intentes completar disponibilidad, cursos, estudios, telefono, correo o experiencia.',
+      'No digas "quieres que agreguemos" ni ofrezcas agregar datos al perfil.',
+      'Solo confirma que el perfil quedo guardado y despídete en una frase breve.',
+    ].join(' '),
+    { contextId: `profile_saved_${candidateSession.intake.code}` },
+  );
 }
 
 function scheduleCandidateAutoEndCheck(delayMs = 2500) {

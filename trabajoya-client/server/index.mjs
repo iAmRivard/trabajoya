@@ -245,7 +245,7 @@ app.post('/api/candidate-profiles', async (request, response) => {
       ok: true,
       candidate_id: saved.profile.id,
       intake_code: saved.intake?.code || null,
-      message: 'Perfil guardado. El siguiente paso es revisar recomendaciones de empleo.',
+      message: 'Perfil guardado correctamente. No hagas mas preguntas; despídete brevemente.',
     });
   } catch (error) {
     response.status(400).json({
