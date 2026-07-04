@@ -612,12 +612,12 @@ async function verifyCandidate(event) {
   }
 }
 
-function limitAgentContextText(text, maxLength = 8000) {
+function limitAgentContextText(text, maxLength = 2200) {
   const value = String(text || '').trim();
 
   if (value.length <= maxLength) return value;
 
-  return `${value.slice(0, maxLength)}\n\n[Texto recortado para iniciar la conversacion]`;
+  return `${value.slice(0, maxLength)}\n\n[Texto recortado para iniciar la conversacion. Si falta algo importante, preguntalo.]`;
 }
 
 function buildIntakeContext(intake) {
@@ -672,7 +672,7 @@ function buildCandidateDynamicVariables() {
     candidate_department: intake.department || '',
     candidate_desired_role: intake.desired_role || '',
     candidate_notes: initialData.notes || '',
-    candidate_cv_text: limitAgentContextText(initialData.cv_text || '', 6000),
+    candidate_cv_text: limitAgentContextText(initialData.cv_text || '', 1800),
   };
 }
 
@@ -690,7 +690,7 @@ function sendIntakeContextToAgent() {
 
     suppressInitialContextEcho = true;
     conversation.sendUserMessage(
-      `${context}\n\nMensaje del candidato: Ya verifique mi telefono. Usa este contexto inicial para completar mi perfil laboral.`,
+      'Ya verifique mi telefono. Usa el contexto inicial y el CV precargado que recibiste. Primero confirma lo que ya tenes y preguntame solo lo que falte para guardar mi perfil.',
     );
     conversation.sendUserActivity();
   }, 350);
@@ -731,6 +731,16 @@ function clearCandidateAutoEndTimer() {
 
   window.clearTimeout(candidateAutoEndTimer);
   candidateAutoEndTimer = null;
+}
+
+function formatDisconnectDetails(details) {
+  if (!details?.reason) return '';
+
+  const reason = details.reason === 'agent' ? 'agente' : details.reason === 'user' ? 'usuario' : 'error';
+  const message = details.message ? `: ${details.message}` : '';
+  const closeReason = details.closeReason ? ` (${details.closeReason})` : '';
+
+  return ` (${reason}${message}${closeReason})`;
 }
 
 async function extractCv(event) {
@@ -821,11 +831,11 @@ async function startConversation() {
         addEvent('system', `Conexión iniciada: ${conversationId}`);
         window.setTimeout(sendIntakeContextToAgent, 700);
       },
-      onDisconnect: () => {
+      onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
         conversation = null;
         setConnectedState(false);
-        addEvent('system', 'Conexión finalizada.');
+        addEvent('system', `Conexión finalizada${formatDisconnectDetails(details)}.`);
       },
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de conversación.');
