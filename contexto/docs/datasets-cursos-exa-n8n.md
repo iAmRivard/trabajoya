@@ -22,9 +22,26 @@ https://diaspora.certificate.gob.sv/
 https://platzi.com/blog/el-salvador/
 ```
 
-## Variables para n8n
+## Configuracion rapida en n8n
 
-No guardar llaves en GitHub. Configurar en el contenedor/proyecto de n8n:
+El workflow importable trae un nodo llamado `Configurar llaves`. Para probar sin
+reiniciar n8n:
+
+```text
+exa_api_key: pegar la API key de Exa
+trabajoya_base_url: https://trabajoya.rivasystems.dev
+trabajoya_api_key: pegar la API key aceptada por TrabajoYA
+```
+
+`trabajoya_api_key` puede ser la `TRABAJOYA_DATASET_API_KEY` o la
+`TRABAJOYA_INTAKE_API_KEY`, segun cual este configurada en el deploy de
+TrabajoYA. Si se dejan los valores `PEGAR_...`, el workflow falla a proposito
+para no ejecutar sin credenciales.
+
+## Variables para produccion
+
+Para no guardar llaves dentro del workflow de n8n, configurar en el
+contenedor/proyecto de n8n y reiniciar el servicio:
 
 ```text
 EXA_API_KEY=...
@@ -32,8 +49,7 @@ TRABAJOYA_BASE_URL=https://trabajoya.rivasystems.dev
 TRABAJOYA_INTAKE_API_KEY=...
 ```
 
-Tambien puede usarse `TRABAJOYA_DATASET_API_KEY`; el workflow revisa esa
-variable si no existe `TRABAJOYA_INTAKE_API_KEY`.
+Tambien puede usarse `TRABAJOYA_DATASET_API_KEY`.
 
 ## Workflow importable
 
@@ -48,11 +64,12 @@ Incluye:
 ```text
 - Manual Trigger: para actualizar cuando queras.
 - Schedule Trigger: diario a las 5 AM.
+- Code node Configurar llaves: para prueba rapida desde la UI.
 - Code node: consulta Exa, normaliza resultados y llama TrabajoYA.
 ```
 
 El workflow inicia desactivado para no interferir con otros flujos. Importarlo,
-configurar variables y activarlo cuando este probado.
+configurar llaves y activarlo cuando este probado.
 
 ## Endpoint TrabajoYA
 

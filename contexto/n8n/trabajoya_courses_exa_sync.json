@@ -8,8 +8,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -520,
-        -120
+        120,
+        180
       ]
     },
     {
@@ -23,36 +23,50 @@
           ]
         }
       },
-      "id": "daily-schedule",
+      "id": "daily-trigger",
       "name": "Diario 5 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -520,
-        80
+        120,
+        360
       ]
     },
     {
       "parameters": {
-        "jsCode": "const exaApiKey = process.env.EXA_API_KEY;\nconst trabajoyaApiKey = process.env.TRABAJOYA_INTAKE_API_KEY || process.env.TRABAJOYA_DATASET_API_KEY;\nconst trabajoyaBaseUrl = (process.env.TRABAJOYA_BASE_URL || 'https://trabajoya.rivasystems.dev').replace(/\\/$/, '');\n\nif (!exaApiKey) {\n  throw new Error('Configura EXA_API_KEY en n8n.');\n}\n\nif (!trabajoyaApiKey) {\n  throw new Error('Configura TRABAJOYA_INTAKE_API_KEY o TRABAJOYA_DATASET_API_KEY en n8n.');\n}\n\nconst sources = [\n  {\n    source: 'incaf',\n    provider: 'INCAF',\n    query: 'cursos formacion disponible El Salvador INCAF',\n    includeDomains: ['incaf.gob.sv', 'www.incaf.gob.sv'],\n    area: 'Formacion tecnica',\n    modality: 'mixta',\n    isFree: true,\n  },\n  {\n    source: 'platzi_gob_sv',\n    provider: 'Platzi / Gobierno de El Salvador',\n    query: 'Platzi gratis Gobierno de El Salvador cursos formacion jovenes empleo certificate.gob.sv',\n    includeDomains: ['certificate.gob.sv', 'platzi.com'],\n    area: 'Tecnologia y habilidades digitales',\n    modality: 'online',\n    isFree: true,\n  },\n];\n\nconst skillKeywords = [\n  ['programacion', ['Programacion', 'Logica', 'Tecnologia']],\n  ['software', ['Software', 'Tecnologia']],\n  ['excel', ['Excel', 'Ofimatica']],\n  ['office', ['Ofimatica']],\n  ['ingles', ['Ingles']],\n  ['ventas', ['Ventas', 'Atencion al cliente']],\n  ['cliente', ['Atencion al cliente', 'Comunicacion']],\n  ['marketing', ['Marketing digital']],\n  ['datos', ['Analisis de datos']],\n  ['inteligencia artificial', ['Inteligencia artificial']],\n  ['gastronomia', ['Gastronomia']],\n  ['turismo', ['Turismo']],\n  ['emprendedor', ['Emprendimiento']],\n  ['emprendimiento', ['Emprendimiento']],\n];\n\nfunction cleanText(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction unique(values) {\n  return [...new Set(values.filter(Boolean))];\n}\n\nfunction inferSkills(text) {\n  const lower = cleanText(text).toLowerCase();\n  const skills = [];\n\n  for (const [keyword, mappedSkills] of skillKeywords) {\n    if (lower.includes(keyword)) {\n      skills.push(...mappedSkills);\n    }\n  }\n\n  return unique(skills).slice(0, 12);\n}\n\nfunction inferTargetRoles(skills) {\n  const roles = [];\n\n  if (skills.includes('Atencion al cliente')) roles.push('Asesor de servicio', 'Auxiliar de tienda');\n  if (skills.includes('Ventas')) roles.push('Vendedor', 'Ejecutivo comercial');\n  if (skills.includes('Programacion')) roles.push('Desarrollador junior');\n  if (skills.includes('Ofimatica')) roles.push('Auxiliar administrativo');\n  if (skills.includes('Gastronomia')) roles.push('Auxiliar de cocina');\n  if (skills.includes('Turismo')) roles.push('Atencion turistica');\n\n  return unique(roles).slice(0, 8);\n}\n\nfunction normalizeResult(source, result) {\n  const title = cleanText(result.title || result.url);\n  const highlightText = Array.isArray(result.highlights) ? result.highlights.join(' ') : '';\n  const description = cleanText(highlightText || result.text || title).slice(0, 2500);\n  const skills = inferSkills(`${title} ${description}`);\n\n  return {\n    source: source.source,\n    provider: source.provider,\n    title,\n    area: source.area,\n    description,\n    modality: source.modality,\n    country: 'El Salvador',\n    is_free: source.isFree,\n    cost: source.isFree ? 0 : null,\n    currency: 'USD',\n    skills,\n    target_roles: inferTargetRoles(skills),\n    source_url: result.url,\n    status: 'active',\n    raw: {\n      exa_id: result.id,\n      published_date: result.publishedDate,\n      query: source.query,\n      score: result.score,\n      highlights: result.highlights || [],\n    },\n  };\n}\n\nasync function exaSearch(source) {\n  const response = await fetch('https://api.exa.ai/search', {\n    method: 'POST',\n    headers: {\n      'x-api-key': exaApiKey,\n      'Content-Type': 'application/json',\n    },\n    body: JSON.stringify({\n      query: source.query,\n      includeDomains: source.includeDomains,\n      numResults: 10,\n      contents: {\n        highlights: true,\n        text: {\n          maxCharacters: 1800,\n        },\n      },\n    }),\n  });\n\n  const body = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`Exa ${source.source} fallo: ${response.status} ${body.slice(0, 300)}`);\n  }\n\n  return JSON.parse(body);\n}\n\nasync function upsertCourses(source, courses, exaResultCount) {\n  if (courses.length === 0) {\n    return {\n      source: source.source,\n      result_count: exaResultCount,\n      upserted: 0,\n      skipped: true,\n    };\n  }\n\n  const response = await fetch(`${trabajoyaBaseUrl}/api/datasets/courses/upsert`, {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-Trabajoya-Key': trabajoyaApiKey,\n    },\n    body: JSON.stringify({\n      source: source.source,\n      sync: {\n        provider: source.provider,\n        query: source.query,\n        include_domains: source.includeDomains,\n        ran_at: new Date().toISOString(),\n      },\n      courses,\n    }),\n  });\n\n  const body = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`TrabajoYA upsert ${source.source} fallo: ${response.status} ${body.slice(0, 300)}`);\n  }\n\n  const data = JSON.parse(body);\n\n  return {\n    source: source.source,\n    result_count: exaResultCount,\n    upserted: data.upserted,\n    skipped: false,\n  };\n}\n\nconst summaries = [];\n\nfor (const source of sources) {\n  const exaData = await exaSearch(source);\n  const results = Array.isArray(exaData.results) ? exaData.results : [];\n  const courses = results\n    .filter((result) => result?.url && result?.title)\n    .map((result) => normalizeResult(source, result));\n  const summary = await upsertCourses(source, courses, results.length);\n\n  summaries.push(summary);\n}\n\nreturn [\n  {\n    json: {\n      ok: true,\n      dataset: 'courses',\n      ran_at: new Date().toISOString(),\n      summaries,\n    },\n  },\n];"
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [\n  {\n    json: {\n      exa_api_key: 'PEGAR_EXA_API_KEY',\n      trabajoya_base_url: 'https://trabajoya.rivasystems.dev',\n      trabajoya_api_key: 'PEGAR_TRABAJOYA_DATASET_O_INTAKE_API_KEY'\n    }\n  }\n];"
       },
-      "id": "sync-courses-code",
+      "id": "config-node",
+      "name": "Configurar llaves",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first()?.json || {};\nconst env = (typeof process !== 'undefined' && process.env) ? process.env : {};\n\nfunction cleanConfig(value) {\n  const text = String(value || '').trim();\n  if (!text || text.startsWith('PEGAR_')) return '';\n  return text;\n}\n\nfunction readConfig(field, envNames = []) {\n  const fromInput = cleanConfig(input[field]);\n  if (fromInput) return fromInput;\n\n  for (const envName of envNames) {\n    const fromEnv = cleanConfig(env[envName]);\n    if (fromEnv) return fromEnv;\n  }\n\n  return '';\n}\n\nconst exaApiKey = readConfig('exa_api_key', ['EXA_API_KEY']);\nconst trabajoyaApiKey = readConfig('trabajoya_api_key', ['TRABAJOYA_DATASET_API_KEY', 'TRABAJOYA_INTAKE_API_KEY']);\nconst trabajoyaBaseUrl = (readConfig('trabajoya_base_url', ['TRABAJOYA_BASE_URL']) || 'https://trabajoya.rivasystems.dev').replace(/\\/$/, '');\n\nif (!exaApiKey) {\n  throw new Error('Edita el nodo \"Configurar llaves\" y pega exa_api_key, o configura EXA_API_KEY en n8n.');\n}\n\nif (!trabajoyaApiKey) {\n  throw new Error('Edita el nodo \"Configurar llaves\" y pega trabajoya_api_key, o configura TRABAJOYA_DATASET_API_KEY/TRABAJOYA_INTAKE_API_KEY en n8n.');\n}\n\nconst sources = [\n  {\n    source: 'incaf',\n    provider: 'INCAF',\n    query: 'cursos formacion disponible El Salvador INCAF',\n    includeDomains: ['incaf.gob.sv', 'www.incaf.gob.sv'],\n    area: 'Formacion tecnica',\n    modality: 'mixta',\n    isFree: true,\n  },\n  {\n    source: 'platzi_gob_sv',\n    provider: 'Platzi / Gobierno de El Salvador',\n    query: 'Platzi gratis Gobierno de El Salvador cursos formacion jovenes empleo certificate.gob.sv',\n    includeDomains: ['certificate.gob.sv', 'platzi.com'],\n    area: 'Tecnologia y habilidades digitales',\n    modality: 'online',\n    isFree: true,\n  },\n];\n\nconst skillKeywords = [\n  ['programacion', ['Programacion', 'Logica', 'Tecnologia']],\n  ['software', ['Software', 'Tecnologia']],\n  ['excel', ['Excel', 'Ofimatica']],\n  ['office', ['Ofimatica']],\n  ['ingles', ['Ingles']],\n  ['ventas', ['Ventas', 'Atencion al cliente']],\n  ['cliente', ['Atencion al cliente', 'Comunicacion']],\n  ['marketing', ['Marketing digital']],\n  ['datos', ['Analisis de datos']],\n  ['inteligencia artificial', ['Inteligencia artificial']],\n  ['gastronomia', ['Gastronomia']],\n  ['turismo', ['Turismo']],\n  ['emprendedor', ['Emprendimiento']],\n  ['emprendimiento', ['Emprendimiento']],\n];\n\nfunction cleanText(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction unique(values) {\n  return [...new Set(values.filter(Boolean))];\n}\n\nfunction inferSkills(text) {\n  const lower = cleanText(text).toLowerCase();\n  const skills = [];\n\n  for (const [keyword, mappedSkills] of skillKeywords) {\n    if (lower.includes(keyword)) {\n      skills.push(...mappedSkills);\n    }\n  }\n\n  return unique(skills).slice(0, 12);\n}\n\nfunction inferTargetRoles(skills) {\n  const roles = [];\n\n  if (skills.includes('Atencion al cliente')) roles.push('Asesor de servicio', 'Auxiliar de tienda');\n  if (skills.includes('Ventas')) roles.push('Vendedor', 'Ejecutivo comercial');\n  if (skills.includes('Programacion')) roles.push('Desarrollador junior');\n  if (skills.includes('Ofimatica')) roles.push('Auxiliar administrativo');\n  if (skills.includes('Gastronomia')) roles.push('Auxiliar de cocina');\n  if (skills.includes('Turismo')) roles.push('Atencion turistica');\n\n  return unique(roles).slice(0, 8);\n}\n\nfunction normalizeResult(source, result) {\n  const title = cleanText(result.title || result.url);\n  const highlightText = Array.isArray(result.highlights) ? result.highlights.join(' ') : '';\n  const description = cleanText(highlightText || result.text || title).slice(0, 2500);\n  const skills = inferSkills(title + ' ' + description);\n\n  return {\n    source: source.source,\n    provider: source.provider,\n    title,\n    area: source.area,\n    description,\n    modality: source.modality,\n    country: 'El Salvador',\n    is_free: source.isFree,\n    cost: source.isFree ? 0 : null,\n    currency: 'USD',\n    skills,\n    target_roles: inferTargetRoles(skills),\n    source_url: result.url,\n    status: 'active',\n    raw: {\n      exa_id: result.id,\n      published_date: result.publishedDate,\n      query: source.query,\n      score: result.score,\n      highlights: result.highlights || [],\n    },\n  };\n}\n\nasync function requestText(url, options) {\n  if (typeof fetch !== 'function') {\n    throw new Error('Este workflow necesita una version de n8n/Node con fetch disponible. Si aparece este error, lo cambiamos a nodos HTTP Request.');\n  }\n\n  const response = await fetch(url, options);\n  const body = await response.text();\n  return { response, body };\n}\n\nasync function exaSearch(source) {\n  const result = await requestText('https://api.exa.ai/search', {\n    method: 'POST',\n    headers: {\n      'x-api-key': exaApiKey,\n      'Content-Type': 'application/json',\n    },\n    body: JSON.stringify({\n      query: source.query,\n      includeDomains: source.includeDomains,\n      numResults: 10,\n      contents: {\n        highlights: true,\n        text: {\n          maxCharacters: 1800,\n        },\n      },\n    }),\n  });\n\n  if (!result.response.ok) {\n    throw new Error('Exa ' + source.source + ' fallo: ' + result.response.status + ' ' + result.body.slice(0, 300));\n  }\n\n  return JSON.parse(result.body);\n}\n\nasync function upsertCourses(source, courses, exaResultCount) {\n  if (courses.length === 0) {\n    return {\n      source: source.source,\n      result_count: exaResultCount,\n      upserted: 0,\n      skipped: true,\n    };\n  }\n\n  const result = await requestText(trabajoyaBaseUrl + '/api/datasets/courses/upsert', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-Trabajoya-Key': trabajoyaApiKey,\n    },\n    body: JSON.stringify({\n      source: source.source,\n      sync: {\n        provider: source.provider,\n        query: source.query,\n        include_domains: source.includeDomains,\n        ran_at: new Date().toISOString(),\n      },\n      courses,\n    }),\n  });\n\n  if (!result.response.ok) {\n    throw new Error('TrabajoYA upsert ' + source.source + ' fallo: ' + result.response.status + ' ' + result.body.slice(0, 300));\n  }\n\n  const data = JSON.parse(result.body);\n\n  return {\n    source: source.source,\n    result_count: exaResultCount,\n    upserted: data.upserted,\n    skipped: false,\n  };\n}\n\nconst summaries = [];\n\nfor (const source of sources) {\n  const exaData = await exaSearch(source);\n  const results = Array.isArray(exaData.results) ? exaData.results : [];\n  const courses = results\n    .filter((result) => result?.url && result?.title)\n    .map((result) => normalizeResult(source, result));\n  const summary = await upsertCourses(source, courses, results.length);\n\n  summaries.push(summary);\n}\n\nreturn [\n  {\n    json: {\n      ok: true,\n      dataset: 'courses',\n      target: trabajoyaBaseUrl,\n      ran_at: new Date().toISOString(),\n      summaries,\n    },\n  },\n];"
+      },
+      "id": "sync-node",
       "name": "Buscar y guardar cursos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -240,
-        -20
+        680,
+        270
       ]
     }
   ],
-  "pinData": {},
   "connections": {
     "Actualizar ahora": {
       "main": [
         [
           {
-            "node": "Buscar y guardar cursos",
+            "node": "Configurar llaves",
             "type": "main",
             "index": 0
           }
@@ -63,6 +77,17 @@
       "main": [
         [
           {
+            "node": "Configurar llaves",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configurar llaves": {
+      "main": [
+        [
+          {
             "node": "Buscar y guardar cursos",
             "type": "main",
             "index": 0
@@ -71,14 +96,14 @@
       ]
     }
   },
-  "active": false,
+  "pinData": {},
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "trabajoya-courses-exa-sync-v1",
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "id": "trabajoya-courses-exa-sync",
-  "tags": []
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-07-04T00:00:00.000Z",
+  "versionId": "trabajoya-courses-exa-sync-v2",
+  "active": false
 }
