@@ -89,6 +89,10 @@ let extractedCv = null;
 let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
 let candidateAutoEndTimer = null;
+let candidateCloseAfterSave = false;
+let candidateSaveCompletedAt = 0;
+let candidateFinalAgentMessageAt = 0;
+let candidateAgentSpeaking = false;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -747,27 +751,55 @@ function isProfileSaveToolResponse(toolResponse) {
   return !toolName || toolName === 'create_candidate_profile';
 }
 
-function scheduleCandidateConversationEnd() {
-  if (!candidateSession?.intake || candidateAutoEndTimer) return;
+function requestCandidateConversationEnd() {
+  if (!candidateSession?.intake || candidateCloseAfterSave) return;
 
+  candidateCloseAfterSave = true;
+  candidateSaveCompletedAt = Date.now();
+  candidateFinalAgentMessageAt = 0;
   setCandidateFlow('saved');
-  setCandidateVerifyStatus('Perfil guardado. Cerrando conversación...');
-  elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará automáticamente.';
-  addEvent('system', 'Perfil guardado; cerraré la conversación en unos segundos.');
+  setCandidateVerifyStatus('Perfil guardado. Esperando despedida del agente...');
+  elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará cuando el agente termine de hablar.';
+  addEvent('system', 'Perfil guardado; esperaré a que el agente termine de hablar.');
+  scheduleCandidateAutoEndCheck(22000);
+}
 
-  candidateAutoEndTimer = window.setTimeout(async () => {
-    candidateAutoEndTimer = null;
+function scheduleCandidateAutoEndCheck(delayMs = 2500) {
+  if (candidateAutoEndTimer) {
+    window.clearTimeout(candidateAutoEndTimer);
+  }
 
-    if (!conversation) return;
+  candidateAutoEndTimer = window.setTimeout(evaluateCandidateConversationEnd, delayMs);
+}
 
+async function evaluateCandidateConversationEnd() {
+  candidateAutoEndTimer = null;
+
+  if (!conversation || !candidateCloseAfterSave) return;
+
+  const now = Date.now();
+  const hasFinalAgentMessage = candidateFinalAgentMessageAt > candidateSaveCompletedAt;
+  const finalMessageSettled = hasFinalAgentMessage && now - candidateFinalAgentMessageAt >= 3500;
+  const fallbackElapsed = now - candidateSaveCompletedAt >= 22000;
+
+  if (!candidateAgentSpeaking && (finalMessageSettled || fallbackElapsed)) {
+    candidateCloseAfterSave = false;
     await stopConversation();
     setCandidateVerifyStatus('Perfil guardado. Conversación finalizada.');
     elements.sessionTitle.textContent = 'Perfil completado';
     elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente.';
-  }, 6500);
+    return;
+  }
+
+  scheduleCandidateAutoEndCheck(candidateAgentSpeaking ? 2500 : 1500);
 }
 
 function clearCandidateAutoEndTimer() {
+  candidateCloseAfterSave = false;
+  candidateSaveCompletedAt = 0;
+  candidateFinalAgentMessageAt = 0;
+  candidateAgentSpeaking = false;
+
   if (!candidateAutoEndTimer) return;
 
   window.clearTimeout(candidateAutoEndTimer);
@@ -889,10 +921,20 @@ async function startConversation() {
         elements.startButton.disabled = false;
       },
       onModeChange: (mode) => {
-        elements.agentStatus.textContent = mode?.mode === 'speaking' ? 'Hablando' : 'Escuchando';
+        candidateAgentSpeaking = mode?.mode === 'speaking';
+        elements.agentStatus.textContent = candidateAgentSpeaking ? 'Hablando' : 'Escuchando';
+
+        if (candidateCloseAfterSave && !candidateAgentSpeaking) {
+          scheduleCandidateAutoEndCheck(2500);
+        }
       },
       onMessage: (message) => {
         if (message?.message) {
+          if (candidateCloseAfterSave && (message.role === 'agent' || message.source !== 'user')) {
+            candidateFinalAgentMessageAt = Date.now();
+            scheduleCandidateAutoEndCheck(4500);
+          }
+
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
         }
       },
@@ -903,7 +945,7 @@ async function startConversation() {
           fetchProfiles();
         }
         if (candidateSession?.intake && isProfileSaveToolResponse(toolResponse)) {
-          scheduleCandidateConversationEnd();
+          requestCandidateConversationEnd();
         }
       },
     };
