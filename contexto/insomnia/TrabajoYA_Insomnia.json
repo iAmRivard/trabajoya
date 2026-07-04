@@ -1,0 +1,348 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-07-04T21:00:29Z",
+  "__export_source": "codex",
+  "resources": [
+    {
+      "_id": "wrk_trabajoya",
+      "parentId": null,
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "TrabajoYA",
+      "description": "Coleccion para probar endpoints de TrabajoYA.",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_trabajoya_base",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Base Environment",
+      "data": {
+        "base_url": "https://trabajoya.rivasystems.dev",
+        "admin_password": "PEGAR_CLAVE_ADMIN",
+        "intake_api_key": "PEGAR_API_KEY_WHATSAPP",
+        "intake_code": "PEGAR_CODIGO_GENERADO",
+        "candidate_phone": "77778888"
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "admin_password",
+          "intake_api_key",
+          "intake_code",
+          "candidate_phone"
+        ]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1783198829000,
+      "_type": "environment"
+    },
+    {
+      "_id": "jar_trabajoya",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Default Jar",
+      "cookies": [],
+      "_type": "cookie_jar"
+    },
+    {
+      "_id": "fld_health",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Health",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -1000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_auth",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Admin Auth",
+      "description": "Login del panel. Insomnia guarda la cookie HTTP-only en el cookie jar.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -900,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_intakes",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Registros",
+      "description": "Creacion y consulta de registros iniciales.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -800,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_profiles",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Perfiles",
+      "description": "Consulta y prueba del guardado final de perfiles.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -700,
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_health",
+      "parentId": "fld_health",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/health",
+      "name": "Health",
+      "description": "",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_auth_session",
+      "parentId": "fld_auth",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/auth/session",
+      "name": "Ver sesion admin",
+      "description": "Devuelve authenticated/configured.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -900,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_auth_login",
+      "parentId": "fld_auth",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/auth/login",
+      "name": "Login admin",
+      "description": "Guarda cookie de sesion admin en Insomnia.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"password\": \"{{ _.admin_password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -890,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_auth_logout",
+      "parentId": "fld_auth",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/auth/logout",
+      "name": "Logout admin",
+      "description": "Borra cookie de sesion.",
+      "method": "POST",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -880,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_intakes_list",
+      "parentId": "fld_intakes",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes",
+      "name": "Listar registros admin",
+      "description": "Requiere login admin previo.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "30",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -800,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_intake_create_admin",
+      "parentId": "fld_intakes",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes",
+      "name": "Crear registro con sesion admin",
+      "description": "Requiere login admin previo.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"phone\": \"{{ _.candidate_phone }}\",\n  \"full_name\": \"QA Admin Insomnia\",\n  \"email\": \"\",\n  \"municipality\": \"San Salvador\",\n  \"department\": \"San Salvador\",\n  \"desired_role\": \"Atencion al cliente\",\n  \"notes\": \"Creado desde Insomnia con sesion admin\",\n  \"source\": \"insomnia_admin\",\n  \"cv_text\": \"Experiencia en atencion al cliente, caja y manejo de inventario. Disponibilidad inmediata.\",\n  \"cv_file_name\": \"qa-admin-cv.txt\",\n  \"cv_source\": \"insomnia\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -790,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_intake_create_api_key",
+      "parentId": "fld_intakes",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes",
+      "name": "Crear registro WhatsApp API key",
+      "description": "Usar este request como referencia para el backend de WhatsApp.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"phone\": \"{{ _.candidate_phone }}\",\n  \"full_name\": \"QA WhatsApp Insomnia\",\n  \"email\": \"\",\n  \"municipality\": \"Soyapango\",\n  \"department\": \"San Salvador\",\n  \"desired_role\": \"Auxiliar de tienda\",\n  \"notes\": \"Creado desde backend WhatsApp\",\n  \"source\": \"whatsapp\",\n  \"cv_text\": \"Texto extraido del CV recibido por WhatsApp. Tiene experiencia en ventas, inventario y atencion al cliente.\",\n  \"cv_file_name\": \"cv-whatsapp.txt\",\n  \"cv_source\": \"whatsapp\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "X-Trabajoya-Key",
+          "value": "{{ _.intake_api_key }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -780,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_intake_verify",
+      "parentId": "fld_intakes",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/verify",
+      "name": "Verificar registro candidato",
+      "description": "Usar el code generado por crear registro. Devuelve cv_text completo si existe.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"phone\": \"{{ _.candidate_phone }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -770,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_profiles_list",
+      "parentId": "fld_profiles",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/profiles",
+      "name": "Listar perfiles admin",
+      "description": "Requiere login admin previo.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "30",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -700,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_profile_create",
+      "parentId": "fld_profiles",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/candidate-profiles",
+      "name": "Crear perfil final prueba",
+      "description": "Simula el tool de ElevenLabs. Si intake_code existe, enlaza o actualiza ese registro.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"source\": \"insomnia_profile_test\",\n  \"intake_code\": \"{{ _.intake_code }}\",\n  \"profile\": {\n    \"personal\": {\n      \"full_name\": \"QA Perfil Insomnia\",\n      \"age_range\": \"25-34\",\n      \"municipality\": \"San Salvador\",\n      \"department\": \"San Salvador\",\n      \"phone\": \"+503{{ _.candidate_phone }}\",\n      \"email\": \"\"\n    },\n    \"professional_summary\": \"Perfil de prueba creado desde Insomnia.\",\n    \"job_goal\": {\n      \"desired_roles\": [\"Atencion al cliente\"],\n      \"desired_areas\": [\"Ventas\"],\n      \"availability\": \"Inmediata\",\n      \"preferred_schedule\": \"Diurno\",\n      \"can_relocate\": false\n    },\n    \"education\": [],\n    \"experience\": [],\n    \"informal_experience\": [],\n    \"skills\": {\n      \"technical\": [],\n      \"soft\": [\"Comunicacion\", \"Responsabilidad\"],\n      \"tools\": [],\n      \"languages\": [\"Espanol nativo\"]\n    },\n    \"certifications_or_courses\": [],\n    \"cv_gaps\": [],\n    \"recommended_next_steps\": []\n  },\n  \"raw_cv_text\": \"Texto CV de prueba.\",\n  \"conversation_summary\": \"Prueba de guardado final desde Insomnia.\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -690,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    }
+  ]
+}

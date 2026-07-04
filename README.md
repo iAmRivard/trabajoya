@@ -90,3 +90,14 @@ Content-Type: application/json
 
 Los endpoints de consulta `GET /api/intakes` y `GET /api/profiles` requieren
 sesion admin desde el panel web.
+
+## Insomnia
+
+Hay una coleccion importable en:
+
+```text
+contexto/insomnia/TrabajoYA_Insomnia.json
+```
+
+Despues de importarla, llenar `admin_password`, `intake_api_key`,
+`intake_code` y `candidate_phone` en el ambiente de Insomnia.
