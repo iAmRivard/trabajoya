@@ -15,10 +15,11 @@ docker-compose.yml       Compose para deploy en Dokploy desde GitHub
 ## Flujo principal
 
 1. Un operador crea un registro inicial con telefono y datos basicos.
-2. El backend genera un codigo corto y una URL publica.
-3. El candidato abre la URL, verifica su telefono y arranca la conversacion.
-4. El agente recibe el contexto del registro.
-5. El tool de ElevenLabs guarda el perfil final en Postgres y lo enlaza al
+2. Opcionalmente se incluye texto de CV o perfil previo en `cv_text`.
+3. El backend genera un codigo corto y una URL publica.
+4. El candidato abre la URL, verifica su telefono y arranca la conversacion.
+5. El agente recibe el contexto del registro y el CV previo, si existe.
+6. El tool de ElevenLabs guarda el perfil final en Postgres y lo enlaza al
    registro inicial.
 
 ## Desarrollo local

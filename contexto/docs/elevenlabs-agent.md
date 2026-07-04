@@ -29,6 +29,8 @@ Reglas:
 - Telefono y correo son opcionales. No detengas el guardado por no tenerlos.
 - Si la persona tiene experiencia informal, ayudala a convertirla en habilidades laborales.
 - Si el usuario subio CV, confirma los datos y pregunta solo lo que falte.
+- Si el usuario llega desde un enlace con CV previo, usa ese texto como base,
+  confirma los datos importantes y pregunta solo lo faltante.
 - Siempre termina con una accion concreta.
 
 Prioridad MVP: guardar rapido
@@ -115,6 +117,8 @@ Body:
 
 Si la conversacion viene desde `/c/CODIGO`, el agente debe enviar
 `intake_code` como campo top-level para enlazar el perfil al registro inicial.
+El contexto puede incluir texto de CV guardado previamente por WhatsApp; usarlo
+para completar el perfil y evitar repetir preguntas.
 
 Respuesta esperada:
 

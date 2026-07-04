@@ -473,6 +473,8 @@ function sendIntakeContextToAgent() {
   if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
 
   const intake = candidateSession.intake;
+  const initialData = intake.initial_data || {};
+  const cvText = initialData.cv_text || '';
   const context = [
     `Registro inicial TrabajoYA: ${intake.code}`,
     `intake_code: ${intake.code}`,
@@ -481,9 +483,16 @@ function sendIntakeContextToAgent() {
     `Municipio: ${intake.municipality || 'No indicado'}`,
     `Departamento: ${intake.department || 'No indicado'}`,
     `Puesto buscado: ${intake.desired_role || 'No indicado'}`,
+    initialData.notes ? `Notas iniciales: ${initialData.notes}` : '',
+    cvText
+      ? `CV o perfil previo enviado por WhatsApp:\n${cvText}`
+      : 'No hay CV previo registrado para este enlace.',
     'Cuando guardes el perfil final, incluye este intake_code en el payload de la herramienta.',
+    cvText ? 'Usa el CV previo como contexto base y confirma solo la informacion clave antes de guardar.' : '',
     'Pregunta solo lo que falte para completar el perfil laboral.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   candidateSession.contextSent = true;
   conversation.sendContextualUpdate(context, { contextId: `intake_${intake.code}` });
@@ -491,7 +500,7 @@ function sendIntakeContextToAgent() {
     'Ya verifique mi telefono. Usa mis datos iniciales para completar mi perfil laboral.',
   );
   conversation.sendUserActivity();
-  addEvent('system', 'Datos iniciales enviados al agente.');
+  addEvent('system', cvText ? 'Datos iniciales y CV enviados al agente.' : 'Datos iniciales enviados al agente.');
 }
 
 async function extractCv(event) {

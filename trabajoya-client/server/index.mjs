@@ -17,6 +17,7 @@ loadEnvFile(envPath);
 const app = express();
 const port = Number(process.env.API_PORT || 8787);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
+const maxCvTextLength = 12000;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -146,7 +147,7 @@ app.post('/api/intakes/:code/verify', async (request, response) => {
 
     response.json({
       ok: true,
-      intake: serializeIntake(result.rows[0], { includePhone: true }),
+      intake: serializeIntake(result.rows[0], { includePhone: true, includeCvText: true }),
     });
   } catch (error) {
     response.status(400).json({
@@ -528,7 +529,7 @@ function cleanText(value) {
 }
 
 function buildInitialData(body) {
-  return {
+  const initialData = {
     full_name: cleanText(body.full_name),
     email: cleanText(body.email),
     municipality: cleanText(body.municipality),
@@ -536,6 +537,24 @@ function buildInitialData(body) {
     desired_role: cleanText(body.desired_role),
     notes: cleanText(body.notes),
   };
+  const cvText = normalizeIncomingCvText(body);
+  const cvFileName = cleanText(body.cv_file_name || body.cv_filename || body.cv?.file_name || body.cv?.filename);
+  const cvSource = cleanText(body.cv_source || body.cv?.source);
+
+  if (cvText) {
+    initialData.cv_text = cvText;
+    initialData.cv_text_length = cvText.length;
+  }
+
+  if (cvFileName) {
+    initialData.cv_file_name = cvFileName;
+  }
+
+  if (cvSource) {
+    initialData.cv_source = cvSource;
+  }
+
+  return initialData;
 }
 
 function serializeIntake(intake, options = {}) {
@@ -551,13 +570,41 @@ function serializeIntake(intake, options = {}) {
     desired_role: intake.desired_role || '',
     source: intake.source,
     status: intake.status,
-    initial_data: intake.initial_data || {},
+    initial_data: serializeInitialData(intake.initial_data, options),
     profile_id: intake.profile_id,
     created_at: intake.created_at,
     updated_at: intake.updated_at,
     last_accessed_at: intake.last_accessed_at,
     completed_at: intake.completed_at,
   };
+}
+
+function serializeInitialData(initialData = {}, options = {}) {
+  const data = { ...initialData };
+  const cvText = cleanText(data.cv_text);
+
+  if (!cvText || options.includeCvText) {
+    return data;
+  }
+
+  delete data.cv_text;
+  data.cv_text_present = true;
+  data.cv_text_preview = cvText.slice(0, 500);
+  data.cv_text_length = data.cv_text_length || cvText.length;
+  return data;
+}
+
+function normalizeIncomingCvText(body) {
+  const rawText =
+    body.cv_text ||
+    body.raw_cv_text ||
+    body.cvText ||
+    body.cv?.text ||
+    body.cv?.raw_text ||
+    body.cv?.rawText;
+  const text = normalizeExtractedText(rawText);
+
+  return text ? limitText(text) : '';
 }
 
 function maskPhone(phone) {
@@ -620,11 +667,9 @@ function normalizeExtractedText(text) {
 }
 
 function limitText(text) {
-  const maxLength = 12000;
+  if (text.length <= maxCvTextLength) return text;
 
-  if (text.length <= maxLength) return text;
-
-  return `${text.slice(0, maxLength)}\n\n[Texto truncado para la conversacion]`;
+  return `${text.slice(0, maxCvTextLength)}\n\n[Texto truncado para la conversacion]`;
 }
 
 function clampNumber(value, min, max) {

@@ -55,7 +55,7 @@ GET  /api/profiles
 ```
 
 `POST /api/intakes` recibe telefono salvadoreno, datos iniciales y devuelve
-un codigo corto mas URL:
+un codigo corto mas URL. Tambien puede recibir texto de CV ya extraido:
 
 ```json
 {
@@ -63,7 +63,10 @@ un codigo corto mas URL:
   "full_name": "Nombre inicial",
   "municipality": "San Salvador",
   "department": "San Salvador",
-  "desired_role": "Atencion al cliente"
+  "desired_role": "Atencion al cliente",
+  "cv_text": "Texto del CV extraido por WhatsApp o por otro backend",
+  "cv_file_name": "cv.pdf",
+  "source": "whatsapp"
 }
 ```
 
@@ -72,6 +75,10 @@ La URL del candidato queda en formato:
 ```text
 https://trabajoya.rivasystems.dev/c/CODIGO
 ```
+
+Cuando el candidato verifica el telefono e inicia la conversacion, la interfaz
+envia al agente el registro inicial, el `intake_code` y el `cv_text` guardado
+para que retome ese contexto.
 
 ## Prueba rapida de guardado
 
