@@ -124,6 +124,24 @@
           </button>
         </div>
 
+        <section id="adminAuthPanel" class="admin-auth" aria-label="Acceso admin">
+          <form id="adminLoginForm" class="admin-login-form">
+            <label for="adminPasswordInput">Clave admin</label>
+            <div class="input-row">
+              <input id="adminPasswordInput" name="password" type="password" autocomplete="current-password" placeholder="Clave del panel" />
+              <button id="adminLoginButton" type="submit">
+                <i data-lucide="log-in"></i>
+                <span>Entrar</span>
+              </button>
+            </div>
+          </form>
+          <button id="adminLogoutButton" type="button" hidden>
+            <i data-lucide="log-out"></i>
+            <span>Salir</span>
+          </button>
+          <p id="adminAuthStatus" class="auth-status">Validando acceso...</p>
+        </section>
+
         <div class="panel-tabs" role="tablist" aria-label="Vistas">
           <button id="activityTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="activityView">
             <i data-lucide="shield-check"></i>

@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { randomInt } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,8 @@ const app = express();
 const port = Number(process.env.API_PORT || 8787);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const maxCvTextLength = 12000;
+const adminCookieName = 'trabajoya_admin';
+const adminSessionTtlSeconds = 60 * 60 * 8;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -30,7 +32,7 @@ app.set('trust proxy', true);
 app.use(express.json());
 app.use((request, response, next) => {
   response.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Trabajoya-Key');
   response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 
   if (request.method === 'OPTIONS') {
@@ -41,7 +43,49 @@ app.use((request, response, next) => {
   next();
 });
 
-app.post('/api/intakes', async (request, response) => {
+app.get('/api/auth/session', (request, response) => {
+  response.json({
+    ok: true,
+    authenticated: isAdminRequest(request),
+    configured: isAdminAuthConfigured(),
+  });
+});
+
+app.post('/api/auth/login', (request, response) => {
+  const adminPassword = getAdminPassword();
+
+  if (!isAdminAuthConfigured()) {
+    response.status(503).json({
+      ok: false,
+      error: 'Configura TRABAJOYA_ADMIN_PASSWORD y TRABAJOYA_SESSION_SECRET en Dokploy.',
+    });
+    return;
+  }
+
+  if (!timingSafeTextEqual(cleanText(request.body.password), adminPassword)) {
+    response.status(401).json({
+      ok: false,
+      error: 'Clave admin incorrecta.',
+    });
+    return;
+  }
+
+  setAdminSessionCookie(response);
+  response.json({
+    ok: true,
+    authenticated: true,
+  });
+});
+
+app.post('/api/auth/logout', (_request, response) => {
+  clearAdminSessionCookie(response);
+  response.json({
+    ok: true,
+    authenticated: false,
+  });
+});
+
+app.post('/api/intakes', requireIntakeCreator, async (request, response) => {
   try {
     const db = getPool();
     const phone = normalizePhoneSV(request.body.phone);
@@ -93,7 +137,7 @@ app.post('/api/intakes', async (request, response) => {
   }
 });
 
-app.get('/api/intakes', async (request, response) => {
+app.get('/api/intakes', requireAdminSession, async (request, response) => {
   const limit = clampNumber(Number(request.query.limit || 25), 1, 100);
 
   try {
@@ -219,7 +263,7 @@ app.get('/api/health', async (_request, response) => {
   }
 });
 
-app.get('/api/profiles', async (request, response) => {
+app.get('/api/profiles', requireAdminSession, async (request, response) => {
   const limit = clampNumber(Number(request.query.limit || 25), 1, 100);
 
   try {
@@ -413,6 +457,150 @@ async function findIntakeByCode(db, code) {
   }
 
   return result.rows[0];
+}
+
+function requireAdminSession(request, response, next) {
+  if (isAdminRequest(request)) {
+    next();
+    return;
+  }
+
+  response.status(401).json({
+    ok: false,
+    error: 'Sesion admin requerida.',
+  });
+}
+
+function requireIntakeCreator(request, response, next) {
+  if (isAdminRequest(request) || hasValidIntakeApiKey(request)) {
+    next();
+    return;
+  }
+
+  response.status(401).json({
+    ok: false,
+    error: 'API key requerida para crear registros.',
+  });
+}
+
+function isAdminAuthConfigured() {
+  return Boolean(getAdminPassword() && getSessionSecret());
+}
+
+function isAdminRequest(request) {
+  const token = parseCookies(request.headers.cookie || '')[adminCookieName];
+  return verifyAdminSessionToken(token);
+}
+
+function hasValidIntakeApiKey(request) {
+  const expectedKey = getIntakeApiKey();
+  const providedKey = getApiKeyFromRequest(request);
+
+  return Boolean(expectedKey && providedKey && timingSafeTextEqual(providedKey, expectedKey));
+}
+
+function getApiKeyFromRequest(request) {
+  const headerKey = cleanText(request.get('x-trabajoya-key'));
+  const authorization = cleanText(request.get('authorization'));
+
+  if (headerKey) return headerKey;
+
+  if (authorization.toLowerCase().startsWith('bearer ')) {
+    return authorization.slice(7).trim();
+  }
+
+  return '';
+}
+
+function getAdminPassword() {
+  return cleanText(process.env.TRABAJOYA_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD);
+}
+
+function getSessionSecret() {
+  return cleanText(process.env.TRABAJOYA_SESSION_SECRET || process.env.ADMIN_SESSION_SECRET);
+}
+
+function getIntakeApiKey() {
+  return cleanText(process.env.TRABAJOYA_INTAKE_API_KEY || process.env.INTAKE_API_KEY);
+}
+
+function setAdminSessionCookie(response) {
+  const token = createAdminSessionToken();
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+
+  response.setHeader(
+    'Set-Cookie',
+    `${adminCookieName}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${adminSessionTtlSeconds}${secure}`,
+  );
+}
+
+function clearAdminSessionCookie(response) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+
+  response.setHeader(
+    'Set-Cookie',
+    `${adminCookieName}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`,
+  );
+}
+
+function createAdminSessionToken() {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(
+    JSON.stringify({
+      iat: now,
+      exp: now + adminSessionTtlSeconds,
+    }),
+  ).toString('base64url');
+  const signature = signAdminSessionPayload(payload);
+
+  return `${payload}.${signature}`;
+}
+
+function verifyAdminSessionToken(token) {
+  const [payload, signature] = String(token || '').split('.');
+
+  if (!payload || !signature || !getSessionSecret()) return false;
+
+  const expectedSignature = signAdminSessionPayload(payload);
+
+  if (!timingSafeTextEqual(signature, expectedSignature)) return false;
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+    return Number(parsed.exp) > now;
+  } catch {
+    return false;
+  }
+}
+
+function signAdminSessionPayload(payload) {
+  return createHmac('sha256', getSessionSecret()).update(payload).digest('base64url');
+}
+
+function parseCookies(cookieHeader) {
+  return String(cookieHeader || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((cookies, part) => {
+      const separator = part.indexOf('=');
+
+      if (separator === -1) return cookies;
+
+      const key = part.slice(0, separator).trim();
+      const value = part.slice(separator + 1).trim();
+
+      cookies[key] = decodeURIComponent(value);
+      return cookies;
+    }, {});
+}
+
+function timingSafeTextEqual(value, expectedValue) {
+  const valueHash = createHash('sha256').update(String(value || '')).digest();
+  const expectedHash = createHash('sha256').update(String(expectedValue || '')).digest();
+
+  return timingSafeEqual(valueHash, expectedHash);
 }
 
 function getPool() {

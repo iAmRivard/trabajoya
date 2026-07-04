@@ -55,7 +55,13 @@ GET  /api/profiles
 ```
 
 `POST /api/intakes` recibe telefono salvadoreno, datos iniciales y devuelve
-un codigo corto mas URL. Tambien puede recibir texto de CV ya extraido:
+un codigo corto mas URL. Requiere sesion admin o API key server-to-server:
+
+```http
+X-Trabajoya-Key: <TRABAJOYA_INTAKE_API_KEY>
+```
+
+Tambien puede recibir texto de CV ya extraido:
 
 ```json
 {
@@ -138,6 +144,9 @@ del repo. Variables requeridas:
 TRABAJOYA_DOMAIN=trabajoya.rivasystems.dev
 PUBLIC_APP_URL=https://trabajoya.rivasystems.dev
 TRABAJOYA_DB_PASSWORD=...
+TRABAJOYA_ADMIN_PASSWORD=...
+TRABAJOYA_SESSION_SECRET=...
+TRABAJOYA_INTAKE_API_KEY=...
 ```
 
 En el VPS el compose esta en:

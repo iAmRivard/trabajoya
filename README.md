@@ -45,6 +45,9 @@ Variables requeridas en Dokploy:
 TRABAJOYA_DOMAIN=trabajoya.rivasystems.dev
 PUBLIC_APP_URL=https://trabajoya.rivasystems.dev
 TRABAJOYA_DB_PASSWORD=...
+TRABAJOYA_ADMIN_PASSWORD=...
+TRABAJOYA_SESSION_SECRET=...
+TRABAJOYA_INTAKE_API_KEY=...
 ```
 
 El compose espera que existan estas redes externas en el VPS:
@@ -74,3 +77,16 @@ trabajoya-client/migrations/001_candidate_intakes.sql
 
 No guardar `.env`, passwords, API keys ni service-role keys en el repo. Si una
 clave se compartio por chat o se uso durante pruebas, conviene rotarla.
+
+## API WhatsApp
+
+Para crear registros desde otro backend:
+
+```http
+POST /api/intakes
+X-Trabajoya-Key: <TRABAJOYA_INTAKE_API_KEY>
+Content-Type: application/json
+```
+
+Los endpoints de consulta `GET /api/intakes` y `GET /api/profiles` requieren
+sesion admin desde el panel web.

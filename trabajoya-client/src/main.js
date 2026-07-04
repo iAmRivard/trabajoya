@@ -6,6 +6,8 @@ import {
   Database,
   FileText,
   Link,
+  LogIn,
+  LogOut,
   MessageSquare,
   Mic,
   MicOff,
@@ -49,6 +51,12 @@ const elements = {
   sessionTitle: document.querySelector('#sessionTitle'),
   sessionDetail: document.querySelector('#sessionDetail'),
   panelTitle: document.querySelector('#panelTitle'),
+  adminAuthPanel: document.querySelector('#adminAuthPanel'),
+  adminLoginForm: document.querySelector('#adminLoginForm'),
+  adminPasswordInput: document.querySelector('#adminPasswordInput'),
+  adminLoginButton: document.querySelector('#adminLoginButton'),
+  adminLogoutButton: document.querySelector('#adminLogoutButton'),
+  adminAuthStatus: document.querySelector('#adminAuthStatus'),
   activityTab: document.querySelector('#activityTab'),
   intakesTab: document.querySelector('#intakesTab'),
   profilesTab: document.querySelector('#profilesTab'),
@@ -80,6 +88,7 @@ let muted = false;
 let profilesLoaded = false;
 let intakesLoaded = false;
 let extractedCv = null;
+let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
 
 function getErrorMessage(error, fallback) {
@@ -94,6 +103,8 @@ createIcons({
     Database,
     FileText,
     Link,
+    LogIn,
+    LogOut,
     MessageSquare,
     Mic,
     MicOff,
@@ -207,6 +218,11 @@ function updateMuteButton() {
 }
 
 function setPanel(panel) {
+  if ((panel === 'intakes' || panel === 'profiles') && !adminAuthenticated) {
+    setAdminAuthStatus('Inicia sesión para ver datos internos.', 'error');
+    panel = 'activity';
+  }
+
   const isActivity = panel === 'activity';
   const isIntakes = panel === 'intakes';
   const isProfiles = panel === 'profiles';
@@ -234,6 +250,109 @@ function setPanel(panel) {
 function setProfilesStatus(text, kind = 'neutral') {
   elements.profilesStatus.textContent = text;
   elements.profilesStatus.dataset.kind = kind;
+}
+
+function setAdminAuthStatus(text, kind = 'neutral') {
+  elements.adminAuthStatus.textContent = text;
+  elements.adminAuthStatus.dataset.kind = kind;
+}
+
+function setAdminAuthenticated(authenticated) {
+  adminAuthenticated = authenticated;
+  elements.adminLoginForm.hidden = authenticated;
+  elements.adminLogoutButton.hidden = !authenticated;
+  elements.intakesTab.disabled = !authenticated;
+  elements.profilesTab.disabled = !authenticated;
+  elements.refreshProfilesButton.disabled = !authenticated;
+  elements.createIntakeButton.disabled = !authenticated;
+
+  if (authenticated) {
+    setAdminAuthStatus('Sesión admin activa.');
+    intakesLoaded = false;
+    profilesLoaded = false;
+    fetchIntakes();
+    fetchProfiles();
+    return;
+  }
+
+  elements.intakeCount.textContent = '0';
+  elements.profileCount.textContent = '0';
+  elements.intakesList.replaceChildren();
+  elements.profilesList.replaceChildren();
+  setIntakesStatus('Inicia sesión para ver registros.');
+  setProfilesStatus('Inicia sesión para ver perfiles.');
+}
+
+function handleAuthRequired(response, data) {
+  if (response.status === 401 || response.status === 403) {
+    setAdminAuthenticated(false);
+    throw new Error(data?.error || 'Inicia sesión para continuar.');
+  }
+}
+
+async function checkAdminSession() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/session`);
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudo validar la sesión.');
+    }
+
+    setAdminAuthenticated(Boolean(data.authenticated));
+    if (!data.configured) {
+      setAdminAuthStatus('Configura seguridad admin en Dokploy.', 'error');
+    }
+  } catch (error) {
+    setAdminAuthenticated(false);
+    setAdminAuthStatus(getErrorMessage(error, 'No se pudo validar la sesión.'), 'error');
+  }
+}
+
+async function loginAdmin(event) {
+  event.preventDefault();
+  elements.adminLoginButton.disabled = true;
+  setAdminAuthStatus('Validando...');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        password: elements.adminPasswordInput.value,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudo iniciar sesión.');
+    }
+
+    elements.adminPasswordInput.value = '';
+    setAdminAuthenticated(true);
+  } catch (error) {
+    setAdminAuthenticated(false);
+    setAdminAuthStatus(getErrorMessage(error, 'No se pudo iniciar sesión.'), 'error');
+  } finally {
+    elements.adminLoginButton.disabled = false;
+  }
+}
+
+async function logoutAdmin() {
+  elements.adminLogoutButton.disabled = true;
+
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: 'POST',
+    });
+  } finally {
+    elements.adminLogoutButton.disabled = false;
+    setAdminAuthenticated(false);
+    setPanel('activity');
+    setAdminAuthStatus('Sesión cerrada.');
+  }
 }
 
 function formatDate(value) {
@@ -342,11 +461,18 @@ function renderIntakes(intakes) {
 }
 
 async function fetchIntakes() {
+  if (!adminAuthenticated) {
+    setIntakesStatus('Inicia sesión para ver registros.');
+    return;
+  }
+
   setIntakesStatus('Cargando registros...');
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/intakes?limit=30`);
     const data = await response.json().catch(() => null);
+
+    handleAuthRequired(response, data);
 
     if (!response.ok || data?.ok !== true) {
       throw new Error(data?.error || 'No se pudieron leer los registros.');
@@ -361,6 +487,12 @@ async function fetchIntakes() {
 
 async function createIntake(event) {
   event.preventDefault();
+
+  if (!adminAuthenticated) {
+    setIntakesStatus('Inicia sesión para crear enlaces.', 'error');
+    return;
+  }
+
   elements.createIntakeButton.disabled = true;
   elements.intakeResult.hidden = true;
   setIntakesStatus('Creando enlace...');
@@ -383,6 +515,8 @@ async function createIntake(event) {
     });
     const data = await response.json().catch(() => null);
 
+    handleAuthRequired(response, data);
+
     if (!response.ok || data?.ok !== true) {
       throw new Error(data?.error || 'No se pudo crear el registro.');
     }
@@ -396,7 +530,7 @@ async function createIntake(event) {
   } catch (error) {
     setIntakesStatus(getErrorMessage(error, 'No se pudo crear el registro.'), 'error');
   } finally {
-    elements.createIntakeButton.disabled = false;
+    elements.createIntakeButton.disabled = !adminAuthenticated;
   }
 }
 
@@ -409,12 +543,19 @@ async function copyIntakeUrl() {
 }
 
 async function fetchProfiles() {
+  if (!adminAuthenticated) {
+    setProfilesStatus('Inicia sesión para ver perfiles.');
+    return;
+  }
+
   elements.refreshProfilesButton.disabled = true;
   setProfilesStatus('Cargando perfiles...');
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/profiles?limit=30`);
     const data = await response.json().catch(() => null);
+
+    handleAuthRequired(response, data);
 
     if (!response.ok || data?.ok !== true) {
       throw new Error(data?.error || 'No se pudo leer Postgres.');
@@ -425,7 +566,7 @@ async function fetchProfiles() {
   } catch (error) {
     setProfilesStatus(getErrorMessage(error, 'No se pudo cargar la lista de perfiles.'), 'error');
   } finally {
-    elements.refreshProfilesButton.disabled = false;
+    elements.refreshProfilesButton.disabled = !adminAuthenticated;
   }
 }
 
@@ -613,7 +754,9 @@ async function startConversation() {
       onAgentToolResponse: () => {
         addEvent('system', 'Perfil procesado por la herramienta de guardado.');
         profilesLoaded = false;
-        fetchProfiles();
+        if (adminAuthenticated) {
+          fetchProfiles();
+        }
       },
     });
   } catch (error) {
@@ -653,6 +796,8 @@ function sendTextMessage(event) {
 elements.startButton.addEventListener('click', startConversation);
 elements.stopButton.addEventListener('click', stopConversation);
 elements.muteButton.addEventListener('click', toggleMute);
+elements.adminLoginForm.addEventListener('submit', loginAdmin);
+elements.adminLogoutButton.addEventListener('click', logoutAdmin);
 elements.candidateVerifyForm.addEventListener('submit', verifyCandidate);
 elements.cvForm.addEventListener('submit', extractCv);
 elements.sendCvContextButton.addEventListener('click', sendCvContextToAgent);
@@ -668,5 +813,4 @@ elements.copyIntakeUrlButton.addEventListener('click', copyIntakeUrl);
 setConnectedState(false);
 initializeCandidateRoute();
 addEvent('system', `Agente listo: ${AGENT_ID}`);
-fetchIntakes();
-fetchProfiles();
+checkAdminSession();

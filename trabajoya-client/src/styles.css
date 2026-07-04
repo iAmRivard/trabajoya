@@ -420,7 +420,7 @@ h1 {
   align-self: stretch;
   min-height: 680px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   padding: 24px;
 }
 
@@ -443,6 +443,36 @@ h1 {
   min-height: 38px;
   padding: 0 11px;
   font-size: 0.86rem;
+}
+
+.admin-auth {
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px solid #e2e5de;
+  padding: 14px 0;
+}
+
+.admin-login-form {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-login-form label {
+  color: #59685f;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.auth-status {
+  min-height: 20px;
+  margin: 0;
+  color: #66746b;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.auth-status[data-kind="error"] {
+  color: #b93525;
 }
 
 .panel-tabs {
