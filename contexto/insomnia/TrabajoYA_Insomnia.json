@@ -266,13 +266,32 @@
       "_type": "request"
     },
     {
+      "_id": "req_intake_open_code",
+      "parentId": "fld_intakes",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}",
+      "name": "Abrir registro por codigo",
+      "description": "Flujo actual del enlace /c/CODIGO. No pide telefono y devuelve cv_text completo si existe.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -775,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
       "_id": "req_intake_verify",
       "parentId": "fld_intakes",
       "modified": 1783198829000,
       "created": 1783198829000,
       "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/verify",
       "name": "Verificar registro candidato",
-      "description": "Usar el code generado por crear registro. Devuelve cv_text completo si existe.",
+      "description": "Compatibilidad con el flujo anterior que pedia telefono.",
       "method": "POST",
       "body": {
         "mimeType": "application/json",

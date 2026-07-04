@@ -174,9 +174,9 @@ h1 {
 
 .candidate-gate {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.95fr);
   gap: 14px;
-  align-items: end;
+  align-items: center;
   border: 1px solid #d8e1d8;
   border-radius: 8px;
   padding: 16px;
@@ -218,8 +218,74 @@ h1 {
   font-size: 0.9rem;
 }
 
+.candidate-flow {
+  counter-reset: profile-step;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate-flow li {
+  counter-increment: profile-step;
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 9px 8px;
+  color: #59685f;
+  background: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.candidate-flow li::before {
+  content: counter(profile-step);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #66746b;
+  background: #edf1ed;
+  font-size: 0.76rem;
+}
+
+.candidate-flow li.is-active {
+  border-color: #2e7d60;
+  color: #143e2a;
+  background: #edf7f0;
+}
+
+.candidate-flow li.is-active::before,
+.candidate-flow li.is-done::before {
+  color: #ffffff;
+  background: #143e2a;
+}
+
+.candidate-flow li.is-done {
+  border-color: #b9cfbf;
+  color: #2d5a41;
+}
+
 .verify-status[data-kind="error"] {
   color: #b93525;
+}
+
+body.candidate-mode #adminAuthPanel,
+body.candidate-mode .panel-tabs,
+body.candidate-mode #refreshProfilesButton {
+  display: none;
+}
+
+body.candidate-mode .side-panel {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .voice-surface {
@@ -660,6 +726,10 @@ h1 {
   .candidate-gate {
     grid-template-columns: 1fr;
   }
+
+  .candidate-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 620px) {
@@ -684,6 +754,10 @@ h1 {
   .verify-form,
   .intake-result,
   .split-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-flow {
     grid-template-columns: 1fr;
   }
 

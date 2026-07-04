@@ -33,9 +33,7 @@ const elements = {
   candidateGate: document.querySelector('#candidateGate'),
   candidateGateTitle: document.querySelector('#candidateGateTitle'),
   candidateGateDetail: document.querySelector('#candidateGateDetail'),
-  candidateVerifyForm: document.querySelector('#candidateVerifyForm'),
-  candidatePhoneInput: document.querySelector('#candidatePhoneInput'),
-  candidateVerifyButton: document.querySelector('#candidateVerifyButton'),
+  candidateSteps: document.querySelector('#candidateSteps'),
   candidateVerifyStatus: document.querySelector('#candidateVerifyStatus'),
   cvForm: document.querySelector('#cvForm'),
   cvInput: document.querySelector('#cvInput'),
@@ -147,8 +145,16 @@ function setConnectedState(isConnected) {
   elements.sendButton.disabled = !isConnected;
   updateCvContextButton();
   elements.connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
-  elements.sessionTitle.textContent = isConnected ? 'Sesión activa' : 'Listo para crear un perfil';
-  elements.sessionDetail.textContent = isConnected ? 'Conversación en curso con TrabajoYA.' : 'Perfil laboral en preparación.';
+
+  if (isConnected) {
+    elements.sessionTitle.textContent = 'Sesión activa';
+    elements.sessionDetail.textContent = 'Conversación en curso con TrabajoYA.';
+  } else if (candidateSession) {
+    updateCandidateSessionCopy();
+  } else {
+    elements.sessionTitle.textContent = 'Listo para crear un perfil';
+    elements.sessionDetail.textContent = 'Perfil laboral en preparación.';
+  }
 
   if (!isConnected) {
     elements.agentStatus.textContent = 'En espera';
@@ -175,19 +181,108 @@ function getCandidateSessionFromPath() {
 function initializeCandidateRoute() {
   if (!candidateSession) return;
 
+  document.body.classList.add('candidate-mode');
   elements.candidateGate.hidden = false;
   elements.candidateGateTitle.textContent = `Código ${candidateSession.code}`;
-  elements.candidateGateDetail.textContent =
-    'Verifica el teléfono asociado para completar el perfil con TrabajoYA.';
-  setCandidateVerifyStatus('Pendiente de verificación.');
-  elements.sessionTitle.textContent = 'Verifica tu teléfono';
-  elements.sessionDetail.textContent = 'Después podrás completar el perfil con el agente.';
+  elements.candidateGateDetail.textContent = 'Buscando tu registro inicial.';
+  elements.panelTitle.textContent = 'Progreso';
+  setCandidateVerifyStatus('Cargando registro...');
+  setCandidateFlow('link');
+  updateCandidateSessionCopy();
   elements.startButton.disabled = true;
+  elements.startButton.innerHTML = '<i data-lucide="play"></i><span>Iniciar entrevista</span>';
+  elements.stopButton.innerHTML = '<i data-lucide="square"></i><span>Pausar</span>';
+  createIcons({ icons: { Play, Square } });
+  loadCandidateIntake();
 }
 
 function setCandidateVerifyStatus(text, kind = 'neutral') {
   elements.candidateVerifyStatus.textContent = text;
   elements.candidateVerifyStatus.dataset.kind = kind;
+}
+
+function setCandidateFlow(stage) {
+  if (!elements.candidateSteps) return;
+
+  const order = ['link', 'context', 'conversation', 'saved'];
+  const activeIndex = order.indexOf(stage);
+
+  for (const item of elements.candidateSteps.querySelectorAll('[data-stage]')) {
+    const itemIndex = order.indexOf(item.dataset.stage);
+    item.classList.toggle('is-done', activeIndex > itemIndex);
+    item.classList.toggle('is-active', activeIndex === itemIndex);
+  }
+}
+
+function updateCandidateSessionCopy() {
+  if (!candidateSession) return;
+
+  const intake = candidateSession.intake;
+
+  if (!intake) {
+    elements.sessionTitle.textContent = 'Preparando tu perfil';
+    elements.sessionDetail.textContent = 'El enlace se está cargando.';
+    return;
+  }
+
+  const name = intake.full_name ? `Perfil de ${intake.full_name}` : 'Construcción de perfil';
+  const location = [intake.municipality, intake.department].filter(Boolean).join(', ');
+  const details = [
+    intake.desired_role ? `Objetivo: ${intake.desired_role}` : '',
+    location ? `Zona: ${location}` : '',
+    intake.initial_data?.cv_text ? 'CV recibido' : 'CV opcional',
+  ].filter(Boolean);
+
+  elements.sessionTitle.textContent = name;
+  elements.sessionDetail.textContent =
+    details.length > 0
+      ? details.join(' | ')
+      : 'TrabajoYA te guiará para completar tu perfil laboral.';
+}
+
+async function loadCandidateIntake() {
+  if (!candidateSession) return;
+
+  setCandidateVerifyStatus('Cargando registro...');
+  setCandidateFlow('link');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}`);
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudo abrir este enlace.');
+    }
+
+    candidateSession.intake = data.intake;
+    candidateSession.contextSent = false;
+    setCandidateFlow(data.intake.status === 'profile_completed' ? 'saved' : 'context');
+    setCandidateVerifyStatus(
+      data.intake.status === 'profile_completed'
+        ? 'Perfil guardado. Puedes actualizarlo si hace falta.'
+        : 'Registro listo. Ya puedes iniciar la entrevista.',
+    );
+    elements.candidateGateDetail.textContent = data.intake.initial_data?.cv_text
+      ? 'Ya tenemos datos iniciales y CV para construir el perfil.'
+      : 'Ya tenemos tu registro inicial para construir el perfil.';
+
+    if (data.intake.initial_data?.cv_text) {
+      setCvStatus('CV inicial recibido desde el registro.');
+    }
+
+    updateCandidateSessionCopy();
+    setConnectedState(false);
+    addEvent('system', `Registro cargado: ${candidateSession.code}`);
+  } catch (error) {
+    candidateSession.intake = null;
+    elements.startButton.disabled = true;
+    elements.candidateGateTitle.textContent = 'Enlace no disponible';
+    elements.candidateGateDetail.textContent = 'No pudimos cargar el registro asociado a este código.';
+    elements.sessionTitle.textContent = 'No se pudo abrir el enlace';
+    elements.sessionDetail.textContent = 'Revisa que el código esté completo.';
+    setCandidateVerifyStatus(getErrorMessage(error, 'No se pudo abrir este enlace.'), 'error');
+    addEvent('error', getErrorMessage(error, 'No se pudo abrir este enlace.'));
+  }
 }
 
 function setCvStatus(text, kind = 'neutral') {
@@ -571,46 +666,6 @@ async function fetchProfiles() {
   }
 }
 
-async function verifyCandidate(event) {
-  event.preventDefault();
-
-  if (!candidateSession) return;
-
-  elements.candidateVerifyButton.disabled = true;
-  setCandidateVerifyStatus('Verificando...');
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}/verify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        phone: elements.candidatePhoneInput.value,
-      }),
-    });
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok || data?.ok !== true) {
-      throw new Error(data?.error || 'No se pudo verificar el enlace.');
-    }
-
-    candidateSession.intake = data.intake;
-    setCandidateVerifyStatus('Teléfono verificado. Ya podés iniciar la conversación.');
-    elements.candidatePhoneInput.disabled = true;
-    elements.candidateVerifyButton.disabled = true;
-    elements.sessionTitle.textContent = data.intake.full_name
-      ? `Hola, ${data.intake.full_name}`
-      : 'Listo para completar tu perfil';
-    elements.sessionDetail.textContent = 'Inicia el agente para revisar tus datos y completar lo pendiente.';
-    setConnectedState(false);
-    addEvent('system', `Registro verificado: ${candidateSession.code}`);
-  } catch (error) {
-    setCandidateVerifyStatus(getErrorMessage(error, 'No se pudo verificar el enlace.'), 'error');
-    elements.candidateVerifyButton.disabled = false;
-  }
-}
-
 function limitAgentContextText(text, maxLength = 2200) {
   const value = String(text || '').trim();
 
@@ -627,7 +682,7 @@ function buildIntakeContext(intake) {
     'CONTEXTO INICIAL DEL CANDIDATO. No leas este bloque completo en voz alta; usalo para guiar la conversacion.',
     `Registro inicial TrabajoYA: ${intake.code}`,
     `intake_code: ${intake.code}`,
-    `Telefono verificado: ${intake.phone}`,
+    `Telefono registrado: ${intake.phone || 'No visible en la interfaz'}`,
     `Nombre inicial: ${intake.full_name || 'No indicado'}`,
     `Municipio: ${intake.municipality || 'No indicado'}`,
     `Departamento: ${intake.department || 'No indicado'}`,
@@ -677,6 +732,7 @@ function sendInitialIntakeContext() {
     contextId: `intake_${intake.code}`,
   });
   candidateSession.contextSent = true;
+  setCandidateFlow('conversation');
   addEvent(
     'system',
     intake.initial_data?.cv_text
@@ -694,6 +750,7 @@ function isProfileSaveToolResponse(toolResponse) {
 function scheduleCandidateConversationEnd() {
   if (!candidateSession?.intake || candidateAutoEndTimer) return;
 
+  setCandidateFlow('saved');
   setCandidateVerifyStatus('Perfil guardado. Cerrando conversación...');
   elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará automáticamente.';
   addEvent('system', 'Perfil guardado; cerraré la conversación en unos segundos.');
@@ -897,7 +954,6 @@ elements.stopButton.addEventListener('click', stopConversation);
 elements.muteButton.addEventListener('click', toggleMute);
 elements.adminLoginForm.addEventListener('submit', loginAdmin);
 elements.adminLogoutButton.addEventListener('click', logoutAdmin);
-elements.candidateVerifyForm.addEventListener('submit', verifyCandidate);
 elements.cvForm.addEventListener('submit', extractCv);
 elements.sendCvContextButton.addEventListener('click', sendCvContextToAgent);
 elements.textForm.addEventListener('submit', sendTextMessage);

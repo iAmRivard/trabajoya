@@ -48,6 +48,7 @@ Endpoints principales:
 
 ```text
 POST /api/intakes
+GET  /api/intakes/:code
 POST /api/intakes/:code/verify
 POST /api/candidate-profiles
 GET  /api/intakes
@@ -82,9 +83,13 @@ La URL del candidato queda en formato:
 https://trabajoya.rivasystems.dev/c/CODIGO
 ```
 
-Cuando el candidato verifica el telefono e inicia la conversacion, la interfaz
-envia al agente el registro inicial, el `intake_code` y el `cv_text` guardado
-para que retome ese contexto.
+Cuando el candidato abre la URL, la interfaz carga el registro por codigo,
+muestra el progreso de construccion del perfil y permite iniciar la entrevista
+sin pedir confirmacion telefonica. Al iniciar, envia al agente el registro
+inicial, el `intake_code` y el `cv_text` guardado para que retome ese contexto.
+
+`POST /api/intakes/:code/verify` queda por compatibilidad con versiones
+anteriores del flujo.
 
 ## Prueba rapida de guardado
 

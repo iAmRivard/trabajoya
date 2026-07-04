@@ -164,6 +164,42 @@ app.get('/api/intakes', requireAdminSession, async (request, response) => {
   }
 });
 
+app.get('/api/intakes/:code', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const result = await db.query(
+      `
+      update public.candidate_intakes
+      set
+        last_accessed_at = now(),
+        status = case when status = 'pending' then 'opened' else status end
+      where code = $1
+      returning *
+      `,
+      [code],
+    );
+
+    if (result.rowCount === 0) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      intake: serializeIntake(result.rows[0], { includeCvText: true }),
+    });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
 app.post('/api/intakes/:code/verify', async (request, response) => {
   try {
     const db = getPool();
@@ -367,11 +403,12 @@ async function saveCandidateProfile(body) {
       profile.metadata?.intake_code,
   );
   const intake = intakeCode ? await findIntakeByCode(db, intakeCode) : null;
+  const phone = cleanText(personal.phone) || intake?.phone_e164 || '';
   const values = [
     intake?.id || null,
     fullName,
     cleanText(personal.email),
-    cleanText(personal.phone),
+    phone,
     cleanText(personal.municipality),
     cleanText(personal.department),
     cleanText(body.source) || 'voice_agent',

@@ -36,18 +36,17 @@
 
         <section id="candidateGate" class="candidate-gate" hidden>
           <div>
-            <p class="eyebrow">Enlace de candidato</p>
-            <h2 id="candidateGateTitle">Verificar teléfono</h2>
-            <p id="candidateGateDetail">Ingresa el teléfono asociado a este código para completar el perfil.</p>
+            <p class="eyebrow">Enlace de perfil</p>
+            <h2 id="candidateGateTitle">Preparando perfil</h2>
+            <p id="candidateGateDetail">Estamos cargando tu registro inicial.</p>
           </div>
-          <form id="candidateVerifyForm" class="verify-form">
-            <input id="candidatePhoneInput" name="phone" type="tel" autocomplete="tel" placeholder="Ej. 77778888" />
-            <button id="candidateVerifyButton" type="submit">
-              <i data-lucide="check-circle"></i>
-              <span>Verificar</span>
-            </button>
-          </form>
-          <p id="candidateVerifyStatus" class="verify-status">Código pendiente</p>
+          <ol id="candidateSteps" class="candidate-flow" aria-label="Progreso del perfil">
+            <li data-stage="link">Registro</li>
+            <li data-stage="context">Contexto</li>
+            <li data-stage="conversation">Entrevista</li>
+            <li data-stage="saved">Guardado</li>
+          </ol>
+          <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
         </section>
 
         <div class="voice-surface">
