@@ -91,6 +91,7 @@ let extractedCv = null;
 let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
 let candidateAutoEndTimer = null;
+let suppressInitialContextEcho = false;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -687,6 +688,7 @@ function sendIntakeContextToAgent() {
   window.setTimeout(() => {
     if (!conversation || !candidateSession?.intake) return;
 
+    suppressInitialContextEcho = true;
     conversation.sendUserMessage(
       `${context}\n\nMensaje del candidato: Ya verifique mi telefono. Usa este contexto inicial para completar mi perfil laboral.`,
     );
@@ -836,6 +838,14 @@ async function startConversation() {
       },
       onMessage: (message) => {
         if (message?.message) {
+          if (message.source === 'user' && suppressInitialContextEcho) {
+            suppressInitialContextEcho = false;
+
+            if (message.message.startsWith('CONTEXTO INICIAL DEL CANDIDATO')) {
+              return;
+            }
+          }
+
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
         }
       },
