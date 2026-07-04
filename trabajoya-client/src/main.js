@@ -622,7 +622,7 @@ function limitAgentContextText(text, maxLength = 2200) {
 
 function buildIntakeContext(intake) {
   const initialData = intake.initial_data || {};
-  const cvText = limitAgentContextText(initialData.cv_text || '');
+  const cvText = limitAgentContextText(initialData.cv_text || '', 1200);
 
   return [
     'CONTEXTO INICIAL DEL CANDIDATO. No leas este bloque completo en voz alta; usalo para guiar la conversacion.',
@@ -651,10 +651,25 @@ function buildCandidateFirstMessage(intake) {
   const hasCv = Boolean(intake.initial_data?.cv_text);
   const name = intake.full_name ? `, ${intake.full_name}` : '';
   const role = intake.desired_role ? ` para ${intake.desired_role}` : '';
+  const location = [intake.municipality, intake.department].filter(Boolean).join(', ');
+  const place = location ? ` en ${location}` : '';
 
   return hasCv
-    ? `Hola${name}. Ya tengo tu registro inicial${role} y el CV que enviaste por WhatsApp. Voy a confirmar lo clave y completar solo lo que falte.`
-    : `Hola${name}. Ya tengo tu registro inicial${role}. Voy a confirmar lo clave y completar solo lo que falte.`;
+    ? `Hola${name}. Ya tengo tu registro inicial${role}${place} y el CV que enviaste por WhatsApp. Voy a confirmar lo clave y completar solo lo que falte.`
+    : `Hola${name}. Ya tengo tu registro inicial${role}${place}. Voy a confirmar lo clave y completar solo lo que falte.`;
+}
+
+function buildCandidatePromptOverride(intake) {
+  return [
+    'Sos TrabajoYa, un asesor laboral de voz para ciudadanos de El Salvador.',
+    'Objetivo: crear un perfil laboral tipo CV de forma breve, amable y practica.',
+    'Reglas: no prometas empleo; no pidas DUI ni datos sensibles; no preguntes religion, genero, salud, politica ni datos financieros; hace una pregunta a la vez.',
+    'Usa el contexto inicial verificado. No pidas de nuevo lo que ya viene ahi. Si hay CV previo, usalo como base y confirma solo lo clave.',
+    'Cuando el usuario confirme, llama create_candidate_profile. Inclui intake_code como campo top-level.',
+    'Despues de guardar el perfil, despídete en una frase corta; la interfaz cerrara la llamada.',
+    '',
+    buildIntakeContext(intake),
+  ].join('\n');
 }
 
 function buildCandidateDynamicVariables() {
@@ -680,24 +695,12 @@ function sendIntakeContextToAgent() {
   if (!conversation || !candidateSession?.intake || candidateSession.contextSent) return;
 
   const intake = candidateSession.intake;
-  const context = buildIntakeContext(intake);
-
   candidateSession.contextSent = true;
-  conversation.sendContextualUpdate(context, { contextId: `intake_${intake.code}` });
-
-  window.setTimeout(() => {
-    if (!conversation || !candidateSession?.intake) return;
-
-    suppressInitialContextEcho = true;
-    conversation.sendUserMessage(
-      'Ya verifique mi telefono. Usa el contexto inicial y el CV precargado que recibiste. Primero confirma lo que ya tenes y preguntame solo lo que falte para guardar mi perfil.',
-    );
-    conversation.sendUserActivity();
-  }, 350);
-
   addEvent(
     'system',
-    intake.initial_data?.cv_text ? 'Datos iniciales y CV enviados al agente.' : 'Datos iniciales enviados al agente.',
+    intake.initial_data?.cv_text
+      ? 'Contexto inicial y CV incluidos al iniciar el agente.'
+      : 'Contexto inicial incluido al iniciar el agente.',
   );
 }
 
@@ -829,7 +832,7 @@ async function startConversation() {
       onConnect: ({ conversationId }) => {
         setConnectedState(true);
         addEvent('system', `Conexión iniciada: ${conversationId}`);
-        window.setTimeout(sendIntakeContextToAgent, 700);
+        sendIntakeContextToAgent();
       },
       onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
@@ -875,6 +878,7 @@ async function startConversation() {
       sessionOptions.dynamicVariables = buildCandidateDynamicVariables();
       sessionOptions.overrides = {
         agent: {
+          prompt: buildCandidatePromptOverride(candidateSession.intake),
           firstMessage: buildCandidateFirstMessage(candidateSession.intake),
         },
       };
