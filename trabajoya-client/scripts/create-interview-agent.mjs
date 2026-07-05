@@ -220,8 +220,15 @@ function saveInterviewFeedbackTool() {
 }
 
 function schemaField(schema) {
+  if (['array', 'object'].includes(schema.type)) {
+    return {
+      description: '',
+      ...schema,
+    };
+  }
+
   const defaultConstantValue =
-    schema.type === 'array' ? [] : schema.type === 'object' ? {} : schema.type === 'boolean' ? false : '';
+    schema.type === 'boolean' ? false : schema.type === 'integer' || schema.type === 'number' ? 0 : '';
   const field = {
     description: '',
     is_system_provided: false,
