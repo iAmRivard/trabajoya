@@ -106,7 +106,22 @@ const elements = {
   profilesList: document.querySelector('#profilesList'),
   profileCount: document.querySelector('#profileCount'),
   eventLog: document.querySelector('#eventLog'),
+  candidateChat: document.querySelector('#candidateChat'),
+  candidateThinking: document.querySelector('#candidateThinking'),
+  candidateThinkingCopy: document.querySelector('#candidateThinkingCopy'),
+  statusPill: document.querySelector('#statusPill'),
+  statusPillText: document.querySelector('#statusPillText'),
+  skipCvButton: document.querySelector('#skipCvButton'),
+  recommendationsLoadingCopy: document.querySelector('#recommendationsLoadingCopy'),
+  interviewChat: document.querySelector('#interviewChat'),
 };
+
+const THINKING_DELAY_MS = 1200;
+const THINKING_COPY_TIERS = [
+  { afterMs: 0, copy: 'Pensando...' },
+  { afterMs: 3000, copy: 'Un momento, estoy organizando tu respuesta...' },
+  { afterMs: 8000, copy: 'Sigo aquí contigo, esto puede tardar un poquito...' },
+];
 
 let conversation = null;
 let muted = false;
@@ -131,9 +146,283 @@ let interviewCloseAfterFeedback = false;
 let interviewFeedbackCompletedAt = 0;
 let interviewFinalAgentMessageAt = 0;
 let interviewAgentSpeaking = false;
+let candidateUiState = 'idle';
+let lastUserMessageAt = 0;
+let thinkingTimer = null;
+let thinkingCopyTimer = null;
+let thinkingStartedAt = 0;
+let asyncProcessingCount = 0;
 
 const noisyMicrophoneThreshold = 0.075;
 const veryNoisyMicrophoneThreshold = 0.12;
+
+function isCandidateMode() {
+  return document.body.classList.contains('candidate-mode') && document.body.classList.contains('ty-v2');
+}
+
+function setCandidateUiState(state, options = {}) {
+  if (!isCandidateMode()) {
+    candidateUiState = state;
+    return;
+  }
+
+  candidateUiState = state;
+  document.body.classList.remove(
+    'ty-state-idle',
+    'ty-state-listening',
+    'ty-state-thinking',
+    'ty-state-speaking',
+    'ty-state-processing',
+    'ty-state-error',
+  );
+  document.body.classList.add(`ty-state-${state}`);
+
+  const pillCopy = {
+    idle: document.body.classList.contains('interview-mode') ? 'Listo para practicar' : 'Listo para hablar contigo',
+    listening: document.body.classList.contains('interview-mode') ? 'Te escucho…' : 'Te escucho…',
+    thinking: 'Pensando…',
+    speaking: document.body.classList.contains('interview-mode') ? 'Platicando contigo…' : 'Platicando contigo…',
+    processing: options.processingCopy || 'Un momento…',
+    error: options.errorCopy || 'Algo salió mal',
+  };
+
+  if (elements.statusPillText) {
+    elements.statusPillText.textContent = pillCopy[state] || pillCopy.idle;
+  }
+}
+
+function showStatusPill() {
+  if (elements.statusPill) {
+    elements.statusPill.hidden = false;
+  }
+}
+
+function getThinkingCopy(elapsedMs) {
+  let copy = THINKING_COPY_TIERS[0].copy;
+
+  for (const tier of THINKING_COPY_TIERS) {
+    if (elapsedMs >= tier.afterMs) copy = tier.copy;
+  }
+
+  return copy;
+}
+
+function updateThinkingCopyLoop() {
+  if (!isCandidateMode() || !elements.candidateThinkingCopy || candidateUiState !== 'thinking') return;
+
+  const elapsedMs = Date.now() - thinkingStartedAt;
+  elements.candidateThinkingCopy.textContent = getThinkingCopy(elapsedMs);
+  thinkingCopyTimer = window.setTimeout(updateThinkingCopyLoop, 1500);
+}
+
+function showCandidateThinking(customCopy) {
+  if (!isCandidateMode()) return;
+
+  thinkingStartedAt = Date.now();
+  if (elements.candidateThinking) {
+    elements.candidateThinking.hidden = false;
+  }
+  if (elements.candidateThinkingCopy) {
+    elements.candidateThinkingCopy.textContent = customCopy || getThinkingCopy(0);
+  }
+  setCandidateUiState('thinking');
+  if (thinkingCopyTimer) window.clearTimeout(thinkingCopyTimer);
+  thinkingCopyTimer = window.setTimeout(updateThinkingCopyLoop, 1500);
+}
+
+function hideCandidateThinking() {
+  if (thinkingTimer) {
+    window.clearTimeout(thinkingTimer);
+    thinkingTimer = null;
+  }
+  if (thinkingCopyTimer) {
+    window.clearTimeout(thinkingCopyTimer);
+    thinkingCopyTimer = null;
+  }
+  if (elements.candidateThinking) {
+    elements.candidateThinking.hidden = true;
+  }
+}
+
+function scheduleThinkingCheck() {
+  if (!isCandidateMode() || !conversation) return;
+  if (lastUserMessageAt <= 0) return;
+
+  if (thinkingTimer) window.clearTimeout(thinkingTimer);
+
+  thinkingTimer = window.setTimeout(() => {
+    thinkingTimer = null;
+    if (!conversation || candidateAgentSpeaking || interviewAgentSpeaking) return;
+    if (asyncProcessingCount > 0) return;
+    if (Date.now() - lastUserMessageAt < THINKING_DELAY_MS) return;
+    showCandidateThinking();
+  }, THINKING_DELAY_MS);
+}
+
+function clearThinkingSchedule() {
+  if (thinkingTimer) {
+    window.clearTimeout(thinkingTimer);
+    thinkingTimer = null;
+  }
+  hideCandidateThinking();
+}
+
+function beginAsyncProcessing(copy) {
+  asyncProcessingCount += 1;
+  if (isCandidateMode()) {
+    setCandidateUiState('processing', { processingCopy: copy });
+    showCandidateThinking(copy);
+  }
+}
+
+function endAsyncProcessing() {
+  asyncProcessingCount = Math.max(0, asyncProcessingCount - 1);
+  if (asyncProcessingCount > 0 || !isCandidateMode()) return;
+
+  hideCandidateThinking();
+  if (conversation) {
+    handleConversationModeChange(conversationMode === 'interview' ? interviewAgentSpeaking : candidateAgentSpeaking);
+  } else {
+    setCandidateUiState('idle');
+  }
+}
+
+function handleConversationModeChange(isSpeaking, modeName) {
+  if (!isCandidateMode()) return;
+
+  const thinkingModes = new Set(['thinking', 'processing', 'busy']);
+  if (thinkingModes.has(modeName)) {
+    clearThinkingSchedule();
+    showCandidateThinking();
+    return;
+  }
+
+  if (isSpeaking) {
+    clearThinkingSchedule();
+    setCandidateUiState('speaking');
+    return;
+  }
+
+  hideCandidateThinking();
+  if (conversation) {
+    setCandidateUiState('listening');
+    if (lastUserMessageAt > 0) {
+      scheduleThinkingCheck();
+    }
+  } else {
+    setCandidateUiState('idle');
+  }
+}
+
+function appendCandidateChatMessage(role, text, target = 'profile') {
+  if (!isCandidateMode() || !text) return;
+
+  const container =
+    target === 'interview' && elements.interviewChat ? elements.interviewChat : elements.candidateChat;
+  if (!container) return;
+
+  const bubble = document.createElement('div');
+  bubble.className = `ty-chat-bubble ${role === 'user' ? 'is-user' : 'is-agent'}`;
+  bubble.textContent = text;
+  container.append(bubble);
+  bubble.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearInterviewChat() {
+  if (elements.interviewChat) {
+    elements.interviewChat.replaceChildren();
+  }
+}
+
+function initInterviewWelcomeChat(job) {
+  if (!isCandidateMode() || !elements.interviewChat) return;
+
+  clearInterviewChat();
+  const title = job?.title || 'esta vacante';
+  appendCandidateChatMessage(
+    'agent',
+    `Vamos a practicar una entrevista para ${title}. Responde con calma, como si fuera en persona.`,
+    'interview',
+  );
+  appendCandidateChatMessage('agent', 'Cuando estés listo, toca el botón de abajo.', 'interview');
+}
+
+function initCandidateWelcomeChat() {
+  if (!isCandidateMode() || !elements.candidateChat) return;
+
+  elements.candidateChat.replaceChildren();
+  appendCandidateChatMessage(
+    'agent',
+    '¡Hola! Vamos a armar tu perfil de trabajo juntos, hablando. No necesitas escribir nada.',
+  );
+  appendCandidateChatMessage('agent', 'Cuando estés listo, toca el botón de abajo y platicamos.');
+}
+
+function updateJourneyStepDetails(stage) {
+  if (!isCandidateMode() || !elements.candidateSteps) return;
+
+  const details = {
+    link: 'En curso ahora',
+    context: 'En curso ahora',
+    conversation: 'Platicando contigo',
+    saved: 'Perfil guardado',
+    recommendations: 'Explorando opciones',
+  };
+
+  for (const item of elements.candidateSteps.querySelectorAll('.ty-step-detail')) {
+    const li = item.closest('li');
+    const stages = li?.dataset.stages ? li.dataset.stages.split(',') : [li?.dataset.stage];
+    if (stages?.includes(stage)) {
+      item.textContent = details[stage] || item.textContent;
+    }
+  }
+}
+
+function getCandidateFitBadge(score, fitLevel) {
+  if (score >= 80 || String(fitLevel || '').toLowerCase().includes('muy')) {
+    return { className: 'is-high', label: 'Combina muy bien contigo' };
+  }
+  if (score >= 60 || String(fitLevel || '').toLowerCase().includes('bien')) {
+    return { className: 'is-mid', label: 'Combina bien contigo' };
+  }
+  return { className: 'is-low', label: 'Opción para explorar' };
+}
+
+function createCandidateJobCard(item) {
+  const article = document.createElement('article');
+  const logo = document.createElement('div');
+  const body = document.createElement('div');
+  const title = document.createElement('h4');
+  const meta = document.createElement('p');
+  const badge = document.createElement('span');
+  const practiceButton = document.createElement('button');
+  const scoreValue = Number(item.score || 0);
+  const fit = getCandidateFitBadge(scoreValue, item.fit_level);
+  const locationParts = [item.company, item.location_text || item.location].filter(Boolean);
+
+  article.className = 'ty-job-card';
+  logo.className = 'ty-job-card-logo';
+  logo.textContent = item.company ? item.company.slice(0, 16) : 'logo empresa';
+  body.className = 'ty-job-card-body';
+  title.textContent = item.title || 'Empleo recomendado';
+  meta.className = 'ty-job-card-meta';
+  meta.textContent = locationParts.join(' · ') || 'Vacante recomendada';
+  badge.className = `ty-fit-badge ${fit.className}`;
+  badge.textContent = fit.label;
+  practiceButton.type = 'button';
+  practiceButton.className = 'ty-job-practice';
+  practiceButton.textContent = 'Practicar entrevista';
+
+  if (item.job_id) {
+    practiceButton.addEventListener('click', () => openInterviewPractice(item));
+  } else {
+    practiceButton.disabled = true;
+  }
+
+  body.append(title, meta, badge, practiceButton);
+  article.append(logo, body);
+  return article;
+}
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -224,10 +513,20 @@ function wait(ms) {
 }
 
 function describeMicrophoneCheck(check) {
-  if (!check || check.kind === 'unknown') return 'Micrófono listo.';
-  if (check.kind === 'very_noisy') return 'Hay bastante ruido de fondo; intenta usar audífonos o acercarte al micrófono.';
-  if (check.kind === 'noisy') return 'Detecté algo de ruido de fondo; hablar cerca del micrófono ayudará a que no se pause.';
-  return 'Micrófono listo con reducción de ruido.';
+  if (!check || check.kind === 'unknown') {
+    return isCandidateMode() ? 'Micrófono listo.' : 'Micrófono listo.';
+  }
+  if (check.kind === 'very_noisy') {
+    return isCandidateMode()
+      ? 'Hay bastante ruido alrededor. Si puedes, usa audífonos o busca un lugar más tranquilo.'
+      : 'Hay bastante ruido de fondo; intenta usar audífonos o acercarte al micrófono.';
+  }
+  if (check.kind === 'noisy') {
+    return isCandidateMode()
+      ? 'Hay un poco de ruido. Habla cerca del teléfono y te escucharemos mejor.'
+      : 'Detecté algo de ruido de fondo; hablar cerca del micrófono ayudará a que no se pause.';
+  }
+  return isCandidateMode() ? 'Micrófono listo. Puedes hablar.' : 'Micrófono listo con reducción de ruido.';
 }
 
 createIcons({
@@ -275,6 +574,11 @@ function addEvent(kind, text) {
   while (elements.eventLog.children.length > 10) {
     elements.eventLog.lastElementChild.remove();
   }
+
+  if (isCandidateMode() && (kind === 'user' || kind === 'agent')) {
+    const target = conversationMode === 'interview' ? 'interview' : 'profile';
+    appendCandidateChatMessage(kind === 'user' ? 'user' : 'agent', text, target);
+  }
 }
 
 function setConnectedState(isConnected) {
@@ -287,17 +591,30 @@ function setConnectedState(isConnected) {
   elements.connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
 
   if (isConnected) {
-    elements.sessionTitle.textContent = 'Sesión activa';
-    elements.sessionDetail.textContent = 'Conversación en curso con TrabajoYA.';
+    if (isCandidateMode()) {
+      elements.sessionTitle.textContent = 'Sesión activa';
+      elements.sessionDetail.textContent = 'Conversación en curso con TrabajoYA.';
+      lastUserMessageAt = 0;
+      setCandidateUiState('listening');
+    } else {
+      elements.sessionTitle.textContent = 'Sesión activa';
+      elements.sessionDetail.textContent = 'Conversación en curso con TrabajoYA.';
+    }
   } else if (candidateSession) {
     updateCandidateSessionCopy();
+    if (isCandidateMode()) {
+      clearThinkingSchedule();
+      setCandidateUiState('idle');
+    }
   } else {
     elements.sessionTitle.textContent = 'Listo para crear un perfil';
     elements.sessionDetail.textContent = 'Perfil laboral en preparación.';
   }
 
   if (!isConnected) {
-    elements.agentStatus.textContent = 'En espera';
+    if (!isCandidateMode()) {
+      elements.agentStatus.textContent = 'En espera';
+    }
     muted = false;
     updateMuteButton();
   }
@@ -324,18 +641,21 @@ function getCandidateSessionFromPath() {
 function initializeCandidateRoute() {
   if (!candidateSession) return;
 
-  document.body.classList.add('candidate-mode');
+  document.body.classList.add('candidate-mode', 'ty-v2');
   elements.candidateGate.hidden = false;
-  elements.candidateGateTitle.textContent = `Código ${candidateSession.code}`;
-  elements.candidateGateDetail.textContent = 'Buscando tu registro inicial.';
-  elements.panelTitle.textContent = 'Progreso';
+  showStatusPill();
+  setCandidateUiState('idle');
+  initCandidateWelcomeChat();
+  elements.candidateGateTitle.textContent = 'Preparando perfil';
+  elements.candidateGateDetail.textContent = 'Estamos cargando tu registro inicial.';
+  elements.panelTitle.textContent = 'Tu camino';
   setCandidateVerifyStatus('Cargando registro...');
   setCandidateFlow('link');
   updateCandidateSessionCopy();
   elements.startButton.disabled = true;
-  elements.startButton.innerHTML = '<i data-lucide="play"></i><span>Iniciar entrevista</span>';
+  elements.startButton.innerHTML = '<i data-lucide="mic"></i><span>Hablar ahora</span>';
   elements.stopButton.innerHTML = '<i data-lucide="square"></i><span>Pausar</span>';
-  createIcons({ icons: { Play, Square } });
+  createIcons({ icons: { Mic, Square } });
   loadCandidateIntake();
 }
 
@@ -355,8 +675,8 @@ function updateCandidateRecommendationsButton() {
   elements.continueRecommendationsButton.hidden = !isCandidateProfileCompleted();
   elements.continueRecommendationsButton.disabled = !canContinue;
   elements.continueRecommendationsButton.innerHTML = recommendationsLoading
-    ? '<i data-lucide="refresh-cw"></i><span>Buscando</span>'
-    : '<i data-lucide="arrow-right"></i><span>Continuar</span>';
+    ? '<i data-lucide="refresh-cw"></i><span>Buscando empleos</span>'
+    : '<i data-lucide="arrow-right"></i><span>Ver empleos para ti</span>';
   createIcons({ icons: { ArrowRight, RefreshCw } });
 }
 
@@ -369,12 +689,21 @@ function setCandidateRecommendationsView(active) {
   }
   elements.recommendationsPanel.hidden = !active;
   elements.continueRecommendationsButton.hidden = active || !isCandidateProfileCompleted();
-  elements.panelTitle.textContent = active ? 'Recomendaciones' : 'Progreso';
+  elements.panelTitle.textContent = 'Tu camino';
 
   if (active) {
     setCandidateFlow('recommendations');
-    elements.sessionTitle.textContent = 'Recomendaciones';
-    elements.sessionDetail.textContent = 'Cursos y empleos alineados a tu perfil.';
+    if (isCandidateMode()) {
+      elements.sessionTitle.textContent = 'Empleos para ti';
+      elements.sessionDetail.textContent = 'Opciones alineadas a tu perfil laboral.';
+      const jobs = candidateRecommendations?.recommendations?.jobs || [];
+      if (jobs.length > 0) {
+        appendCandidateChatMessage('agent', `¡Encontré ${jobs.length} empleo${jobs.length === 1 ? '' : 's'} que te pueden gustar!`);
+      }
+    } else {
+      elements.sessionTitle.textContent = 'Recomendaciones';
+      elements.sessionDetail.textContent = 'Cursos y empleos alineados a tu perfil.';
+    }
     return;
   }
 
@@ -389,11 +718,17 @@ function setCandidateFlow(stage) {
   const order = ['link', 'context', 'conversation', 'saved', 'recommendations'];
   const activeIndex = order.indexOf(stage);
 
-  for (const item of elements.candidateSteps.querySelectorAll('[data-stage]')) {
-    const itemIndex = order.indexOf(item.dataset.stage);
-    item.classList.toggle('is-done', activeIndex > itemIndex);
-    item.classList.toggle('is-active', activeIndex === itemIndex);
+  for (const item of elements.candidateSteps.querySelectorAll('[data-stage], [data-stages]')) {
+    const stages = item.dataset.stages ? item.dataset.stages.split(',') : [item.dataset.stage];
+    const stageIndexes = stages.map((value) => order.indexOf(value)).filter((index) => index >= 0);
+    const itemMinIndex = Math.min(...stageIndexes);
+    const itemMaxIndex = Math.max(...stageIndexes);
+
+    item.classList.toggle('is-done', activeIndex > itemMaxIndex);
+    item.classList.toggle('is-active', activeIndex >= itemMinIndex && activeIndex <= itemMaxIndex);
   }
+
+  updateJourneyStepDetails(stage);
 }
 
 function updateCandidateSessionCopy() {
@@ -407,7 +742,7 @@ function updateCandidateSessionCopy() {
     return;
   }
 
-  const name = intake.full_name ? `Perfil de ${intake.full_name}` : 'Construcción de perfil';
+  const name = intake.full_name ? `Hola, ${intake.full_name.split(' ')[0]}` : 'Construyamos tu perfil';
   const location = [intake.municipality, intake.department].filter(Boolean).join(', ');
   const details = [
     intake.desired_role ? `Objetivo: ${intake.desired_role}` : '',
@@ -441,17 +776,20 @@ async function loadCandidateIntake() {
     setCandidateFlow(data.intake.status === 'profile_completed' ? 'saved' : 'context');
     setCandidateVerifyStatus(
       data.intake.status === 'profile_completed'
-        ? 'Perfil guardado. Puedes actualizarlo si hace falta.'
-        : 'Registro listo. Ya puedes iniciar la entrevista.',
+        ? 'Perfil guardado. Puedes ver empleos recomendados.'
+        : 'Todo listo. Ya puedes hablar con el asesor.',
     );
     elements.candidateGateDetail.textContent = data.intake.initial_data?.cv_text
       ? 'Ya tenemos datos iniciales y CV para construir el perfil.'
       : 'Ya tenemos tu registro inicial para construir el perfil.';
 
     if (data.intake.initial_data?.cv_text) {
-      setCvStatus('CV inicial recibido desde el registro.');
+      setCvStatus('Ya tenemos tu CV. Lo usaremos en la conversación.');
     }
 
+    if (data.intake.full_name) {
+      elements.candidateGateTitle.textContent = `Hola, ${data.intake.full_name.split(' ')[0]}`;
+    }
     updateCandidateSessionCopy();
     setConnectedState(false);
     updateCandidateRecommendationsButton();
@@ -464,6 +802,9 @@ async function loadCandidateIntake() {
     elements.sessionTitle.textContent = 'No se pudo abrir el enlace';
     elements.sessionDetail.textContent = 'Revisa que el código esté completo.';
     setCandidateVerifyStatus(getErrorMessage(error, 'No se pudo abrir este enlace.'), 'error');
+    if (isCandidateMode()) {
+      setCandidateUiState('error', { errorCopy: 'No se pudo abrir el enlace' });
+    }
     addEvent('error', getErrorMessage(error, 'No se pudo abrir este enlace.'));
   }
 }
@@ -489,15 +830,31 @@ function renderCvPreview() {
 }
 
 function updateMuteButton() {
+  const mutedLabel = isCandidateMode() ? 'Mic apagado' : 'Silenciado';
+
   elements.muteButton.setAttribute('aria-pressed', muted ? 'true' : 'false');
   elements.muteButton.innerHTML = muted
-    ? '<i data-lucide="mic-off"></i><span>Silenciado</span>'
+    ? `<i data-lucide="mic-off"></i><span>${mutedLabel}</span>`
     : '<i data-lucide="mic"></i><span>Micrófono</span>';
   elements.muteInterviewButton.setAttribute('aria-pressed', muted ? 'true' : 'false');
   elements.muteInterviewButton.innerHTML = muted
-    ? '<i data-lucide="mic-off"></i><span>Silenciado</span>'
+    ? `<i data-lucide="mic-off"></i><span>${mutedLabel}</span>`
     : '<i data-lucide="mic"></i><span>Micrófono</span>';
   createIcons({ icons: { Mic, MicOff } });
+}
+
+function syncInterviewPresentation() {
+  if (!isCandidateMode() || !document.body.classList.contains('interview-mode')) return;
+
+  const hasFeedback = elements.interviewFeedback && !elements.interviewFeedback.hidden;
+  if (hasFeedback) {
+    setCandidateUiState('idle');
+    return;
+  }
+
+  if (conversation && conversationMode === 'interview') return;
+
+  setCandidateUiState('idle');
 }
 
 function setPanel(panel) {
@@ -861,6 +1218,14 @@ function setRecommendationsStatus(text, kind = 'neutral') {
 function setRecommendationsLoading(isLoading) {
   recommendationsLoading = isLoading;
   elements.recommendationsLoading.hidden = !isLoading;
+  if (elements.recommendationsLoadingCopy) {
+    elements.recommendationsLoadingCopy.textContent = 'Buscando empleos para ti...';
+  }
+  if (isLoading && isCandidateMode()) {
+    beginAsyncProcessing('Buscando empleos para ti...');
+  } else if (!isLoading && isCandidateMode()) {
+    endAsyncProcessing();
+  }
   elements.refreshRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted() || Boolean(conversation);
   elements.backToProfileButton.disabled = Boolean(conversation);
   elements.continueRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted();
@@ -891,8 +1256,13 @@ async function fetchCandidateRecommendations() {
   }
 
   setRecommendationsLoading(true);
-  setRecommendationsStatus('Buscando oportunidades en vivo. Esto puede tardar un poco.');
-  elements.recommendationsSummary.textContent = 'Estamos comparando tu perfil con cursos y empleos disponibles.';
+  if (isCandidateMode()) {
+    setRecommendationsStatus('');
+    elements.recommendationsSummary.textContent = 'Estamos buscando empleos que encajen contigo.';
+  } else {
+    setRecommendationsStatus('Buscando oportunidades en vivo. Esto puede tardar un poco.');
+    elements.recommendationsSummary.textContent = 'Estamos comparando tu perfil con cursos y empleos disponibles.';
+  }
   elements.recommendationsMeta.hidden = true;
   elements.recommendationsJobs.replaceChildren();
   elements.recommendationsCourses.replaceChildren();
@@ -920,7 +1290,9 @@ async function fetchCandidateRecommendations() {
   } catch (error) {
     candidateRecommendations = null;
     setRecommendationsStatus(getErrorMessage(error, 'No se pudieron generar recomendaciones.'), 'error');
-    elements.recommendationsSummary.textContent = 'No pudimos completar la búsqueda. Puedes intentar de nuevo.';
+    elements.recommendationsSummary.textContent = isCandidateMode()
+      ? 'No pudimos buscar empleos ahora. Intenta de nuevo en un momento.'
+      : 'No pudimos completar la búsqueda. Puedes intentar de nuevo.';
     addEvent('error', getErrorMessage(error, 'No se pudieron generar recomendaciones.'));
   } finally {
     setRecommendationsLoading(false);
@@ -932,9 +1304,12 @@ function renderCandidateRecommendations(data) {
   const courses = data.recommendations?.courses || [];
   const gaps = data.profile_gaps || [];
 
-  elements.recommendationsSummary.textContent =
-    data.summary || 'Estas opciones se generaron a partir de tu perfil laboral.';
-  setRecommendationsStatus(data.cached ? 'Mostrando la recomendación guardada más reciente.' : 'Recomendaciones listas.');
+  elements.recommendationsSummary.textContent = isCandidateMode()
+    ? data.summary || 'Estos empleos se eligieron según tu perfil.'
+    : data.summary || 'Estas opciones se generaron a partir de tu perfil laboral.';
+  if (!isCandidateMode()) {
+    setRecommendationsStatus(data.cached ? 'Mostrando la recomendación guardada más reciente.' : 'Recomendaciones listas.');
+  }
   renderRecommendationsMeta(data);
   renderRecommendationCards(elements.recommendationsJobs, jobs, 'job');
   renderRecommendationCards(elements.recommendationsCourses, courses, 'course');
@@ -966,17 +1341,23 @@ function renderRecommendationCards(container, items, type) {
 
   if (!items.length) {
     const empty = document.createElement('p');
-    empty.className = 'empty-recommendations';
+    empty.className = isCandidateMode() && type === 'job' ? 'ty-empty-state' : 'empty-recommendations';
     empty.textContent =
       type === 'job'
-        ? 'No encontramos empleos suficientemente alineados por ahora.'
+        ? isCandidateMode()
+          ? 'Todavía no encontramos empleos que encajen contigo. Puedes intentar de nuevo en un momento.'
+          : 'No encontramos empleos suficientemente alineados por ahora.'
         : 'No encontramos cursos suficientemente alineados por ahora.';
     container.append(empty);
     return;
   }
 
   for (const item of items) {
-    container.append(createRecommendationCard(item, type));
+    if (isCandidateMode() && type === 'job') {
+      container.append(createCandidateJobCard(item));
+    } else {
+      container.append(createRecommendationCard(item, type));
+    }
   }
 }
 
@@ -1091,6 +1472,34 @@ function getScoreClass(score) {
 function setInterviewStatus(text, kind = 'neutral') {
   elements.interviewStatus.textContent = text;
   elements.interviewStatus.dataset.kind = kind;
+
+  if (isCandidateMode() && kind === 'error') {
+    setCandidateUiState('error', { errorCopy: text });
+  }
+}
+
+function resetInterviewPresentation() {
+  if (!isCandidateMode()) {
+    elements.interviewTitle.textContent = 'Simulacion de entrevista';
+    elements.interviewDetail.textContent = 'Elegí una vacante recomendada para practicar con un entrevistador de voz.';
+    elements.startInterviewButton.innerHTML = '<i data-lucide="play"></i><span>Iniciar práctica</span>';
+    setInterviewStatus('Sin iniciar.');
+    return;
+  }
+
+  elements.interviewTitle.textContent = 'Practica con esta vacante';
+  elements.interviewDetail.textContent = 'Será una conversación corta, como si fuera con el empleador.';
+  elements.startInterviewButton.innerHTML = '<i data-lucide="mic"></i><span>Hablar ahora</span>';
+  elements.stopInterviewButton.innerHTML = '<i data-lucide="square"></i><span>Pausar</span>';
+  setInterviewStatus('Toca el botón cuando quieras empezar.');
+  createIcons({ icons: { Mic, Play, Square } });
+}
+
+function setInterviewJourneyDetail(text) {
+  if (!isCandidateMode() || !elements.candidateSteps) return;
+
+  const step = elements.candidateSteps.querySelector('[data-stage="recommendations"] .ty-step-detail');
+  if (step) step.textContent = text;
 }
 
 function clearInterviewPanel() {
@@ -1099,12 +1508,13 @@ function clearInterviewPanel() {
   interviewLoading = false;
   document.body.classList.remove('interview-mode');
   elements.interviewPanel.hidden = true;
-  elements.interviewTitle.textContent = 'Simulacion de entrevista';
-  elements.interviewDetail.textContent = 'Elegí una vacante recomendada para practicar con un entrevistador de voz.';
   elements.interviewJobSummary.replaceChildren();
   elements.interviewFeedback.replaceChildren();
   elements.interviewFeedback.hidden = true;
-  setInterviewStatus('Sin iniciar.');
+  clearInterviewChat();
+  resetInterviewPresentation();
+  setInterviewJourneyDetail('Al final');
+  syncInterviewPresentation();
   updateInterviewControls();
 }
 
@@ -1128,20 +1538,36 @@ async function openInterviewPractice(job) {
   if (!candidateSession?.intake || !candidateRecommendations?.run_id || !job?.job_id) return;
 
   if (conversation) {
-    setInterviewStatus('Detén la conversación actual antes de iniciar una práctica.', 'error');
+    setInterviewStatus(
+      isCandidateMode()
+        ? 'Termina la conversación actual antes de practicar.'
+        : 'Detén la conversación actual antes de iniciar una práctica.',
+      'error',
+    );
     return;
   }
 
   clearInterviewFeedbackTimer();
   interviewLoading = true;
   document.body.classList.add('interview-mode');
+  if (isCandidateMode()) {
+    setCandidateUiState('idle');
+    setInterviewJourneyDetail('Practicando entrevista');
+  }
   elements.interviewPanel.hidden = false;
   elements.interviewFeedback.hidden = true;
   elements.interviewFeedback.replaceChildren();
-  elements.interviewTitle.textContent = 'Preparando práctica';
-  elements.interviewDetail.textContent = 'Creando una sesión corta con la vacante seleccionada.';
+  clearInterviewChat();
+  if (isCandidateMode()) {
+    beginAsyncProcessing('Preparando tu práctica...');
+    elements.interviewTitle.textContent = 'Preparando tu práctica';
+    elements.interviewDetail.textContent = 'Un momento mientras armamos la simulación.';
+  } else {
+    elements.interviewTitle.textContent = 'Preparando práctica';
+    elements.interviewDetail.textContent = 'Creando una sesión corta con la vacante seleccionada.';
+  }
   elements.interviewJobSummary.replaceChildren();
-  setInterviewStatus('Creando sesión de entrevista...');
+  setInterviewStatus(isCandidateMode() ? 'Un momento...' : 'Creando sesión de entrevista...');
   updateInterviewControls();
 
   try {
@@ -1169,7 +1595,12 @@ async function openInterviewPractice(job) {
       job,
     };
     renderInterviewSession(data.session, data.context);
-    setInterviewStatus('Práctica lista. Será breve, de 4 a 6 preguntas.');
+    initInterviewWelcomeChat(job);
+    setInterviewStatus(
+      isCandidateMode()
+        ? 'Listo. Toca el botón cuando quieras empezar.'
+        : 'Práctica lista. Será breve, de 4 a 6 preguntas.',
+    );
     addEvent('system', `Práctica preparada: ${data.session_id}`);
   } catch (error) {
     activeInterview = null;
@@ -1177,13 +1608,22 @@ async function openInterviewPractice(job) {
     addEvent('error', getErrorMessage(error, 'No se pudo crear la práctica.'));
   } finally {
     interviewLoading = false;
+    if (isCandidateMode()) endAsyncProcessing();
     updateInterviewControls();
   }
 }
 
 function renderInterviewSession(session, context = null) {
-  const selectedJob = session?.selected_job || context?.selected_job || {};
+  const selectedJob = session?.selected_job || context?.selected_job || activeInterview?.job || {};
   const title = selectedJob.title || 'Vacante recomendada';
+
+  if (isCandidateMode()) {
+    elements.interviewTitle.textContent = 'Practica con esta vacante';
+    elements.interviewDetail.textContent = 'Será una conversación corta, como si fuera con el empleador.';
+    elements.interviewJobSummary.replaceChildren(createCandidateInterviewJobCard(selectedJob));
+    return;
+  }
+
   const meta = [
     selectedJob.company,
     selectedJob.location_text,
@@ -1221,6 +1661,31 @@ function renderInterviewSession(session, context = null) {
   }
 }
 
+function createCandidateInterviewJobCard(job) {
+  const article = document.createElement('article');
+  const logo = document.createElement('div');
+  const body = document.createElement('div');
+  const jobTitle = document.createElement('h4');
+  const meta = document.createElement('p');
+  const scoreValue = Number(job.score || 0);
+  const fit = getCandidateFitBadge(scoreValue, job.fit_level);
+  const badge = document.createElement('span');
+  const locationParts = [job.company, job.location_text || job.location].filter(Boolean);
+
+  article.className = 'ty-job-card ty-interview-job-card';
+  logo.className = 'ty-job-card-logo';
+  logo.textContent = job.company ? job.company.slice(0, 16) : 'logo empresa';
+  body.className = 'ty-job-card-body';
+  jobTitle.textContent = job.title || 'Vacante recomendada';
+  meta.className = 'ty-job-card-meta';
+  meta.textContent = locationParts.join(' · ') || 'Vacante seleccionada';
+  badge.className = `ty-fit-badge ${fit.className}`;
+  badge.textContent = fit.label;
+  body.append(jobTitle, meta, badge);
+  article.append(logo, body);
+  return article;
+}
+
 function updateInterviewControls() {
   const interviewSelected = Boolean(activeInterview);
   const interviewConnected = Boolean(conversation && conversationMode === 'interview');
@@ -1244,7 +1709,7 @@ async function startInterviewConversation() {
     conversationMode = 'interview';
     elements.connectionStatus.textContent = 'Conectando';
     elements.startInterviewButton.disabled = true;
-    setInterviewStatus('Solicitando acceso al micrófono...');
+    setInterviewStatus(isCandidateMode() ? 'Conectando contigo...' : 'Solicitando acceso al micrófono...');
     addEvent('system', 'Solicitando acceso al micrófono para práctica.');
 
     const microphoneCheck = await prepareVoiceMicrophone();
@@ -1262,7 +1727,11 @@ async function startInterviewConversation() {
       },
       onConnect: ({ conversationId }) => {
         setConnectedState(true);
-        setInterviewStatus('Entrevista en curso. Responde como si fuera con el empleador.');
+        setInterviewStatus(
+          isCandidateMode()
+            ? 'Entrevista en curso. Responde con naturalidad.'
+            : 'Entrevista en curso. Responde como si fuera con el empleador.',
+        );
         activeInterview.conversationId = conversationId;
         addEvent('system', `Práctica iniciada: ${conversationId}`);
         window.setTimeout(() => sendInterviewContext(conversationId), 700);
@@ -1272,7 +1741,9 @@ async function startInterviewConversation() {
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
-        setInterviewStatus('Conexión finalizada. Esperando feedback...');
+        setInterviewStatus(
+          isCandidateMode() ? 'Práctica finalizada. Preparando tu retroalimentación...' : 'Conexión finalizada. Esperando feedback...',
+        );
         addEvent('system', `Práctica finalizada${formatDisconnectDetails(details)}.`);
         scheduleInterviewFeedbackPoll(1000);
       },
@@ -1287,7 +1758,11 @@ async function startInterviewConversation() {
       },
       onModeChange: (mode) => {
         interviewAgentSpeaking = mode?.mode === 'speaking';
-        elements.agentStatus.textContent = interviewAgentSpeaking ? 'Entrevistando' : 'Escuchando';
+        if (isCandidateMode()) {
+          handleConversationModeChange(interviewAgentSpeaking, mode?.mode);
+        } else {
+          elements.agentStatus.textContent = interviewAgentSpeaking ? 'Entrevistando' : 'Escuchando';
+        }
 
         if (interviewCloseAfterFeedback && !interviewAgentSpeaking) {
           scheduleInterviewAutoEndCheck(2200);
@@ -1295,16 +1770,26 @@ async function startInterviewConversation() {
       },
       onMessage: (message) => {
         if (message?.message) {
+          if (message.source === 'user') {
+            lastUserMessageAt = Date.now();
+            clearThinkingSchedule();
+            if (isCandidateMode()) setCandidateUiState('listening');
+          } else {
+            hideCandidateThinking();
+            if (isCandidateMode()) setCandidateUiState('speaking');
+          }
+
           if (interviewCloseAfterFeedback && (message.role === 'agent' || message.source !== 'user')) {
             interviewFinalAgentMessageAt = Date.now();
             scheduleInterviewAutoEndCheck(3200);
           }
 
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
+          if (message.source === 'user') scheduleThinkingCheck();
         }
       },
       onAgentToolResponse: (toolResponse) => {
-        setInterviewStatus('Feedback recibido del agente. Guardando...');
+        setInterviewStatus(isCandidateMode() ? 'Recibimos tu feedback. Guardándolo...' : 'Feedback recibido del agente. Guardando...');
         addEvent('system', 'El agente envió feedback de entrevista.');
         scheduleInterviewFeedbackPoll(700);
         if (isInterviewFeedbackToolResponse(toolResponse)) {
@@ -1335,7 +1820,9 @@ function requestInterviewConversationEnd() {
   interviewCloseAfterFeedback = true;
   interviewFeedbackCompletedAt = Date.now();
   interviewFinalAgentMessageAt = 0;
-  setInterviewStatus('Feedback guardado. Esperando despedida del agente...');
+  setInterviewStatus(
+    isCandidateMode() ? 'Feedback guardado. Esperando despedida del asesor...' : 'Feedback guardado. Esperando despedida del agente...',
+  );
   addEvent('system', 'Feedback recibido; cerraré la práctica cuando el agente termine de hablar.');
   sendInterviewClosureInstruction();
   scheduleInterviewAutoEndCheck(16000);
@@ -1375,7 +1862,7 @@ async function evaluateInterviewConversationEnd() {
   if (!interviewAgentSpeaking && (finalMessageSettled || fallbackElapsed)) {
     interviewCloseAfterFeedback = false;
     await stopConversation();
-    setInterviewStatus('Entrevista finalizada. Esperando feedback...');
+    setInterviewStatus(isCandidateMode() ? 'Práctica finalizada. Preparando tu retroalimentación...' : 'Entrevista finalizada. Esperando feedback...');
     return;
   }
 
@@ -1463,29 +1950,53 @@ async function pollInterviewFeedback({ repeat = false } = {}) {
 
     if (data.session.status === 'completed') {
       renderInterviewFeedback(data.session);
-      setInterviewStatus('Feedback listo.');
+      setInterviewStatus(isCandidateMode() ? 'Tu retroalimentación está lista.' : 'Feedback listo.');
+      if (isCandidateMode()) {
+        endAsyncProcessing();
+        setCandidateUiState('idle');
+        appendCandidateChatMessage(
+          'agent',
+          '¡Listo! Aquí tienes un resumen de cómo te fue en la práctica.',
+          'interview',
+        );
+      }
       addEvent('system', 'Feedback de entrevista guardado.');
       updateInterviewControls();
       return;
     }
 
     if (data.session.status === 'failed') {
-      setInterviewStatus('La simulación terminó con error al guardar feedback.', 'error');
+      if (isCandidateMode()) endAsyncProcessing();
+      setInterviewStatus(
+        isCandidateMode()
+          ? 'No pudimos guardar la retroalimentación. Puedes intentar de nuevo.'
+          : 'La simulación terminó con error al guardar feedback.',
+        'error',
+      );
       updateInterviewControls();
       return;
     }
 
     if (repeat) {
-      setInterviewStatus('Esperando feedback del agente...');
+      if (isCandidateMode()) {
+        beginAsyncProcessing('Preparando tu retroalimentación...');
+      }
+      setInterviewStatus(isCandidateMode() ? 'Preparando tu retroalimentación...' : 'Esperando feedback del agente...');
       scheduleInterviewFeedbackPoll(3000);
     }
   } catch (error) {
+    if (isCandidateMode()) endAsyncProcessing();
     setInterviewStatus(getErrorMessage(error, 'No se pudo leer el feedback.'), 'error');
     addEvent('error', getErrorMessage(error, 'No se pudo leer el feedback.'));
   }
 }
 
 function renderInterviewFeedback(session) {
+  if (isCandidateMode()) {
+    renderCandidateInterviewFeedback(session);
+    return;
+  }
+
   const feedback = session.feedback || {};
   const scores = session.scores || {};
   const overall = Number(feedback.overall_score || scores.overall || 0);
@@ -1514,6 +2025,65 @@ function renderInterviewFeedback(session) {
     createFeedbackList('Respuestas sugeridas', feedback.suggested_answers),
     createFeedbackList('Próximos pasos', feedback.next_steps),
   );
+}
+
+function renderCandidateInterviewFeedback(session) {
+  const feedback = session.feedback || {};
+
+  elements.interviewFeedback.replaceChildren();
+  elements.interviewFeedback.hidden = false;
+
+  const header = document.createElement('div');
+  const eyebrow = document.createElement('p');
+  const title = document.createElement('h3');
+  header.className = 'ty-interview-feedback-header';
+  eyebrow.className = 'ty-feedback-heading';
+  eyebrow.textContent = 'Tu retroalimentación';
+  title.className = 'ty-feedback-title';
+  title.textContent = 'Así te fue en la práctica';
+  header.append(eyebrow, title);
+  elements.interviewFeedback.append(header);
+
+  if (feedback.summary) {
+    const summaryBubble = document.createElement('div');
+    summaryBubble.className = 'ty-chat-bubble is-agent';
+    summaryBubble.textContent = feedback.summary;
+    elements.interviewFeedback.append(summaryBubble);
+  }
+
+  elements.interviewFeedback.append(
+    createCandidateFeedbackSection('Lo hiciste bien', feedback.strengths),
+    createCandidateFeedbackSection('Puedes mejorar', feedback.improvements),
+    createCandidateFeedbackSection('Tip para la próxima', feedback.suggested_answers),
+    createCandidateFeedbackSection('Siguiente paso', feedback.next_steps),
+  );
+  syncInterviewPresentation();
+}
+
+function createCandidateFeedbackSection(label, values) {
+  const block = document.createElement('div');
+  const title = document.createElement('strong');
+  const normalized = Array.isArray(values) ? values.filter(Boolean).slice(0, 5) : [];
+
+  block.className = 'ty-feedback-section';
+  title.textContent = label;
+
+  if (normalized.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Sin observaciones por ahora.';
+    block.append(title, empty);
+    return block;
+  }
+
+  const list = document.createElement('ul');
+  for (const value of normalized) {
+    const item = document.createElement('li');
+    item.textContent = value;
+    list.append(item);
+  }
+
+  block.append(title, list);
+  return block;
 }
 
 function createFeedbackList(label, values) {
@@ -1632,8 +2202,11 @@ function requestCandidateConversationEnd() {
   candidateSaveCompletedAt = Date.now();
   candidateFinalAgentMessageAt = 0;
   setCandidateFlow('saved');
-  setCandidateVerifyStatus('Perfil guardado. Esperando despedida del agente...');
-  elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará cuando el agente termine de hablar.';
+  if (isCandidateMode()) {
+    beginAsyncProcessing('Guardando tu perfil...');
+  }
+  setCandidateVerifyStatus('Perfil guardado. Un momento mientras te despides...');
+  elements.sessionDetail.textContent = 'Tu perfil quedó guardado. La sesión se cerrará en un momento.';
   addEvent('system', 'Perfil guardado; esperaré a que el agente termine de hablar.');
   updateCandidateRecommendationsButton();
   scheduleCandidateAutoEndCheck(22000);
@@ -1674,9 +2247,13 @@ async function evaluateCandidateConversationEnd() {
   if (!candidateAgentSpeaking && (finalMessageSettled || fallbackElapsed)) {
     candidateCloseAfterSave = false;
     await stopConversation();
-    setCandidateVerifyStatus('Perfil guardado. Conversación finalizada.');
+    setCandidateVerifyStatus('¡Listo! Tu perfil quedó guardado.');
+    if (isCandidateMode()) {
+      endAsyncProcessing();
+      setCandidateUiState('idle');
+    }
     elements.sessionTitle.textContent = 'Perfil completado';
-    elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente. Puedes continuar.';
+    elements.sessionDetail.textContent = 'Gracias. Ya puedes ver empleos recomendados para ti.';
     updateCandidateRecommendationsButton();
     return;
   }
@@ -1721,6 +2298,9 @@ async function extractCv(event) {
 
   elements.extractCvButton.disabled = true;
   elements.sendCvContextButton.disabled = true;
+  if (isCandidateMode()) {
+    beginAsyncProcessing('Leyendo tu CV...');
+  }
   setCvStatus('Extrayendo CV...');
   elements.cvPreview.hidden = true;
   elements.cvPreview.textContent = '';
@@ -1743,16 +2323,20 @@ async function extractCv(event) {
     };
 
     const pages = data.file?.pages ? `, ${data.file.pages} pag.` : '';
-    setCvStatus(`${data.file?.name || 'CV'} listo${pages}.`);
+    setCvStatus(isCandidateMode() ? 'CV recibido. Lo usaremos en la conversación.' : `${data.file?.name || 'CV'} listo${pages}.`);
     renderCvPreview();
     updateCvContextButton();
     addEvent('system', `CV extraido: ${data.file?.name || file.name}`);
+    if (conversation && extractedCv?.text) {
+      sendCvContextToAgent();
+    }
   } catch (error) {
     extractedCv = null;
     setCvStatus(getErrorMessage(error, 'No se pudo extraer el CV.'), 'error');
     updateCvContextButton();
   } finally {
     elements.extractCvButton.disabled = false;
+    if (isCandidateMode()) endAsyncProcessing();
   }
 }
 
@@ -1814,10 +2398,17 @@ async function startConversation() {
         addEvent('error', message);
         elements.connectionStatus.textContent = 'Error';
         elements.startButton.disabled = false;
+        if (isCandidateMode()) {
+          setCandidateUiState('error', { errorCopy: 'No pudimos conectar' });
+        }
       },
       onModeChange: (mode) => {
         candidateAgentSpeaking = mode?.mode === 'speaking';
-        elements.agentStatus.textContent = candidateAgentSpeaking ? 'Hablando' : 'Escuchando';
+        if (isCandidateMode()) {
+          handleConversationModeChange(candidateAgentSpeaking, mode?.mode);
+        } else {
+          elements.agentStatus.textContent = candidateAgentSpeaking ? 'Hablando' : 'Escuchando';
+        }
 
         if (candidateCloseAfterSave && !candidateAgentSpeaking) {
           scheduleCandidateAutoEndCheck(2500);
@@ -1825,12 +2416,22 @@ async function startConversation() {
       },
       onMessage: (message) => {
         if (message?.message) {
+          if (message.source === 'user') {
+            lastUserMessageAt = Date.now();
+            clearThinkingSchedule();
+            if (isCandidateMode()) setCandidateUiState('listening');
+          } else {
+            hideCandidateThinking();
+            if (isCandidateMode()) setCandidateUiState('speaking');
+          }
+
           if (candidateCloseAfterSave && (message.role === 'agent' || message.source !== 'user')) {
             candidateFinalAgentMessageAt = Date.now();
             scheduleCandidateAutoEndCheck(4500);
           }
 
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
+          if (message.source === 'user') scheduleThinkingCheck();
         }
       },
       onAgentToolResponse: (toolResponse) => {
@@ -1870,7 +2471,9 @@ async function stopConversation() {
   await activeConversation.endSession();
   setConnectedState(false);
   if (previousMode === 'interview') {
-    setInterviewStatus('Conexión finalizada. Esperando feedback...');
+    setInterviewStatus(
+      isCandidateMode() ? 'Práctica finalizada. Preparando tu retroalimentación...' : 'Conexión finalizada. Esperando feedback...',
+    );
     scheduleInterviewFeedbackPoll(1000);
   }
 }
@@ -1917,6 +2520,19 @@ elements.stopInterviewButton.addEventListener('click', stopConversation);
 elements.muteInterviewButton.addEventListener('click', toggleMute);
 elements.retryInterviewButton.addEventListener('click', retryInterviewPractice);
 elements.backToRecommendationsButton.addEventListener('click', backToRecommendationsFromInterview);
+if (elements.skipCvButton) {
+  elements.skipCvButton.addEventListener('click', () => {
+    const panel = document.querySelector('.ty-cv-card');
+    if (panel) panel.hidden = true;
+  });
+}
+if (elements.cvInput) {
+  elements.cvInput.addEventListener('change', () => {
+    if (elements.cvInput.files?.[0]) {
+      elements.cvForm.requestSubmit();
+    }
+  });
+}
 
 setConnectedState(false);
 initializeCandidateRoute();

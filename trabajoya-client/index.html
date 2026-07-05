@@ -4,99 +4,129 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TrabajoYA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <main class="app-shell">
       <section class="workspace" aria-label="TrabajoYA">
-        <div class="identity">
-          <div class="mark" aria-hidden="true">
-            <span class="mark-line"></span>
-            <span class="mark-dot"></span>
-          </div>
-          <div>
-            <p class="eyebrow">Asesor laboral de voz</p>
-            <h1>TrabajoYA</h1>
-          </div>
-        </div>
-
-        <div class="status-strip" aria-live="polite">
-          <div class="status-item">
-            <i data-lucide="radio"></i>
-            <span id="connectionStatus">Desconectado</span>
-          </div>
-          <div class="status-item">
-            <i data-lucide="message-square"></i>
-            <span id="agentStatus">En espera</span>
-          </div>
-          <div class="status-item">
-            <i data-lucide="database"></i>
-            <span>n8n + Postgres</span>
-          </div>
-        </div>
-
-        <section id="candidateGate" class="candidate-gate" hidden>
-          <div>
-            <p class="eyebrow">Enlace de perfil</p>
-            <h2 id="candidateGateTitle">Preparando perfil</h2>
-            <p id="candidateGateDetail">Estamos cargando tu registro inicial.</p>
-          </div>
-          <ol id="candidateSteps" class="candidate-flow" aria-label="Progreso del perfil">
-            <li data-stage="link">Registro</li>
-            <li data-stage="context">Contexto</li>
-            <li data-stage="conversation">Entrevista</li>
-            <li data-stage="saved">Guardado</li>
-            <li data-stage="recommendations">Opciones</li>
-          </ol>
-          <div class="candidate-status-row">
-            <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
-            <button id="continueRecommendationsButton" class="primary-action" type="button" hidden>
-              <i data-lucide="arrow-right"></i>
-              <span>Continuar</span>
-            </button>
-          </div>
-        </section>
-
-        <div class="voice-surface">
-          <div class="voice-orbit" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <div class="session-copy">
-            <h2 id="sessionTitle">Listo para crear un perfil</h2>
-            <p id="sessionDetail">Perfil laboral en preparación.</p>
-          </div>
-        </div>
-
-        <section class="cv-panel" aria-label="CV">
-          <form id="cvForm" class="cv-form">
-            <label for="cvInput">CV</label>
-            <div class="cv-row">
-              <input id="cvInput" name="cv" type="file" accept=".pdf,.txt,application/pdf,text/plain" />
-              <button id="extractCvButton" type="submit">
-                <i data-lucide="file-text"></i>
-                <span>Extraer</span>
-              </button>
-              <button id="sendCvContextButton" type="button" disabled>
-                <i data-lucide="upload"></i>
-                <span>Enviar al agente</span>
-              </button>
+        <header class="ty-header">
+          <div class="identity">
+            <div class="mark ty-logo" aria-hidden="true">
+              <span class="ty-logo-text">TY</span>
+              <span class="mark-line"></span>
+              <span class="mark-dot"></span>
             </div>
-          </form>
-          <div class="cv-result">
-            <p id="cvStatus">Sin CV</p>
-            <pre id="cvPreview" hidden></pre>
+            <div>
+              <p class="eyebrow ty-eyebrow">Tu asesor laboral</p>
+              <h1>TrabajoYA</h1>
+            </div>
           </div>
-        </section>
+
+          <div class="status-strip" aria-live="polite">
+            <div class="status-item">
+              <i data-lucide="radio"></i>
+              <span id="connectionStatus">Desconectado</span>
+            </div>
+            <div class="status-item">
+              <i data-lucide="message-square"></i>
+              <span id="agentStatus">En espera</span>
+            </div>
+            <div class="status-item ty-status-tech">
+              <i data-lucide="database"></i>
+              <span>n8n + Postgres</span>
+            </div>
+          </div>
+
+          <div id="statusPill" class="ty-status-pill" hidden aria-live="polite">
+            <span class="ty-status-dot" aria-hidden="true"></span>
+            <span id="statusPillText">Listo para hablar contigo</span>
+          </div>
+        </header>
+
+        <div id="candidateThinking" class="ty-thinking ty-thinking-global" hidden aria-live="polite">
+          <span class="ty-thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span id="candidateThinkingCopy">Pensando...</span>
+        </div>
+
+        <div class="ty-main-grid">
+          <div class="ty-conversation-column">
+            <section class="ty-conversation-card" aria-label="Conversación">
+              <div id="candidateChat" class="ty-chat" aria-live="polite"></div>
+
+              <div class="voice-surface">
+                <div class="voice-orbit" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="session-copy">
+                  <h2 id="sessionTitle">Listo para crear un perfil</h2>
+                  <p id="sessionDetail">Perfil laboral en preparación.</p>
+                </div>
+              </div>
+
+              <div class="controls ty-voice-controls" aria-label="Controles de conversación">
+                <button id="startButton" class="primary-action ty-mic-button" type="button">
+                  <i data-lucide="mic"></i>
+                  <span>Iniciar</span>
+                </button>
+                <div class="ty-secondary-controls">
+                  <button id="stopButton" type="button" disabled>
+                    <i data-lucide="square"></i>
+                    <span>Detener</span>
+                  </button>
+                  <button id="muteButton" type="button" disabled aria-pressed="false">
+                    <i data-lucide="mic"></i>
+                    <span>Micrófono</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="cv-panel ty-cv-card" aria-label="CV">
+              <div class="ty-cv-icon" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.6" />
+                  <line x1="8" y1="9" x2="16" y2="9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                  <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </div>
+              <div class="ty-cv-copy">
+                <p class="ty-cv-title">¿Tienes un CV?</p>
+                <p id="cvStatus" class="ty-cv-subtitle">Súbelo y te conocemos más rápido. Si no tienes, no pasa nada.</p>
+              </div>
+              <form id="cvForm" class="cv-form ty-cv-form">
+                <label for="cvInput" class="ty-sr-only">CV</label>
+                <div class="cv-row">
+                  <input id="cvInput" name="cv" type="file" accept=".pdf,.txt,application/pdf,text/plain" />
+                  <button id="extractCvButton" type="submit" class="ty-cv-upload">
+                    <i data-lucide="upload"></i>
+                    <span>Subir CV</span>
+                  </button>
+                  <button id="sendCvContextButton" type="button" disabled class="ty-cv-send">
+                    <i data-lucide="upload"></i>
+                    <span>Enviar al agente</span>
+                  </button>
+                </div>
+              </form>
+              <button id="skipCvButton" type="button" class="ty-cv-skip">No tengo, seguir hablando</button>
+              <pre id="cvPreview" class="ty-cv-preview" hidden></pre>
+            </section>
+          </div>
+        </div>
 
         <section id="recommendationsPanel" class="recommendations-panel" aria-label="Recomendaciones" hidden>
           <div class="recommendations-header">
             <div>
-              <p class="eyebrow">Siguientes pasos</p>
-              <h2>Recomendaciones para tu perfil</h2>
-              <p id="recommendationsSummary">Buscaremos cursos y empleos alineados a tu perfil laboral.</p>
+              <p class="eyebrow ty-rec-eyebrow">Al terminar de hablar</p>
+              <h2>Empleos que pueden gustarte</h2>
+              <p id="recommendationsSummary">Buscaremos empleos alineados a tu perfil laboral.</p>
             </div>
             <div class="recommendations-actions">
               <button id="backToProfileButton" type="button">
@@ -110,63 +140,69 @@
             </div>
           </div>
 
-          <div id="recommendationsLoading" class="recommendations-loading" hidden>
-            <span></span>
-            <p>Buscando oportunidades y comparándolas con tu perfil.</p>
+          <div id="recommendationsLoading" class="recommendations-loading ty-processing" hidden>
+            <span class="ty-thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            <p id="recommendationsLoadingCopy">Buscando empleos para ti...</p>
           </div>
 
           <p id="recommendationsStatus" class="recommendations-status">Sin cargar</p>
           <div id="recommendationsMeta" class="recommendations-meta" hidden></div>
 
-          <section id="interviewPanel" class="interview-panel" aria-label="Simulacion de entrevista" hidden>
-            <div class="interview-header">
-              <div>
-                <p class="eyebrow">Practica corta</p>
-                <h3 id="interviewTitle">Simulacion de entrevista</h3>
-                <p id="interviewDetail">Elegí una vacante recomendada para practicar con un entrevistador de voz.</p>
-              </div>
-              <button id="backToRecommendationsButton" type="button">
+          <section id="interviewPanel" class="interview-panel ty-interview-shell" aria-label="Practica de entrevista" hidden>
+            <div class="ty-interview-header">
+              <button id="backToRecommendationsButton" class="ty-back-link" type="button">
                 <i data-lucide="arrow-left"></i>
-                <span>Opciones</span>
+                <span>Volver a empleos</span>
               </button>
+              <div class="ty-interview-intro">
+                <p class="eyebrow ty-rec-eyebrow">Práctica de entrevista</p>
+                <h3 id="interviewTitle">Practica con esta vacante</h3>
+                <p id="interviewDetail">Será una conversación corta, como si fuera con el empleador.</p>
+              </div>
             </div>
 
-            <div class="interview-job" id="interviewJobSummary"></div>
+            <div class="interview-job ty-interview-job" id="interviewJobSummary"></div>
 
-            <div class="interview-controls" aria-label="Controles de practica">
-              <button id="startInterviewButton" class="primary-action" type="button" disabled>
-                <i data-lucide="play"></i>
-                <span>Iniciar práctica</span>
-              </button>
-              <button id="stopInterviewButton" type="button" disabled>
-                <i data-lucide="square"></i>
-                <span>Detener</span>
-              </button>
-              <button id="muteInterviewButton" type="button" disabled aria-pressed="false">
-                <i data-lucide="mic"></i>
-                <span>Micrófono</span>
-              </button>
-              <button id="retryInterviewButton" type="button" hidden>
-                <i data-lucide="refresh-cw"></i>
-                <span>Repetir</span>
-              </button>
-            </div>
+            <section class="ty-conversation-card ty-interview-session" aria-label="Conversacion de practica">
+              <div id="interviewChat" class="ty-chat ty-interview-chat" aria-live="polite"></div>
 
-            <p id="interviewStatus" class="interview-status">Sin iniciar.</p>
+              <div class="ty-voice-controls ty-interview-controls" aria-label="Controles de practica">
+                <button id="startInterviewButton" class="primary-action ty-mic-button ty-interview-mic" type="button" disabled>
+                  <i data-lucide="mic"></i>
+                  <span>Hablar ahora</span>
+                </button>
+                <div class="ty-secondary-controls">
+                  <button id="stopInterviewButton" type="button" disabled>
+                    <i data-lucide="square"></i>
+                    <span>Pausar</span>
+                  </button>
+                  <button id="muteInterviewButton" type="button" disabled aria-pressed="false">
+                    <i data-lucide="mic"></i>
+                    <span>Micrófono</span>
+                  </button>
+                  <button id="retryInterviewButton" class="ty-outline-button" type="button" hidden>
+                    <i data-lucide="refresh-cw"></i>
+                    <span>Repetir</span>
+                  </button>
+                </div>
+              </div>
 
-            <section id="interviewFeedback" class="interview-feedback" aria-label="Feedback de entrevista" hidden></section>
+              <p id="interviewStatus" class="interview-status ty-interview-status">Toca el botón cuando quieras empezar.</p>
+            </section>
+
+            <section id="interviewFeedback" class="interview-feedback ty-interview-feedback" aria-label="Feedback de entrevista" hidden></section>
           </section>
 
-          <div class="recommendations-grid">
+          <div class="recommendations-grid ty-jobs-grid">
             <section class="recommendation-column" aria-labelledby="jobsTitle">
-              <div class="recommendation-column-title">
+              <div class="recommendation-column-title ty-jobs-title">
                 <i data-lucide="briefcase"></i>
                 <h3 id="jobsTitle">Empleos</h3>
               </div>
-              <div id="recommendationsJobs" class="recommendation-list"></div>
+              <div id="recommendationsJobs" class="recommendation-list ty-job-cards"></div>
             </section>
 
-            <section class="recommendation-column" aria-labelledby="coursesTitle">
+            <section class="recommendation-column ty-courses-column" aria-labelledby="coursesTitle">
               <div class="recommendation-column-title">
                 <i data-lucide="book-open"></i>
                 <h3 id="coursesTitle">Cursos</h3>
@@ -181,21 +217,6 @@
           </section>
         </section>
 
-        <div class="controls" aria-label="Controles de conversación">
-          <button id="startButton" class="primary-action" type="button">
-            <i data-lucide="play"></i>
-            <span>Iniciar</span>
-          </button>
-          <button id="stopButton" type="button" disabled>
-            <i data-lucide="square"></i>
-            <span>Detener</span>
-          </button>
-          <button id="muteButton" type="button" disabled aria-pressed="false">
-            <i data-lucide="mic"></i>
-            <span>Micrófono</span>
-          </button>
-        </div>
-
         <form id="textForm" class="text-composer">
           <label for="textInput">Mensaje</label>
           <div class="input-row">
@@ -208,8 +229,8 @@
         </form>
       </section>
 
-      <aside class="side-panel" aria-label="Panel de seguimiento">
-        <div class="panel-header">
+      <aside class="side-panel ty-progress-panel" aria-label="Panel de seguimiento">
+        <div class="panel-header ty-panel-header">
           <div>
             <p class="eyebrow">Seguimiento</p>
             <h2 id="panelTitle">Actividad</h2>
@@ -290,6 +311,45 @@
         <section id="profilesView" class="panel-view" role="tabpanel" aria-labelledby="profilesTab" hidden>
           <p id="profilesStatus" class="profiles-status">Sin cargar</p>
           <div id="profilesList" class="profiles-list"></div>
+        </section>
+
+        <section id="candidateGate" class="candidate-gate ty-journey-panel" hidden aria-label="Tu camino">
+          <p class="ty-journey-title">Tu camino</p>
+          <div class="ty-gate-intro">
+            <h2 id="candidateGateTitle" class="ty-sr-only">Preparando perfil</h2>
+            <p id="candidateGateDetail" class="ty-sr-only">Estamos cargando tu registro inicial.</p>
+          </div>
+          <ol id="candidateSteps" class="candidate-flow ty-journey" aria-label="Progreso del perfil">
+            <li data-stage="link" data-stages="link,context,conversation">
+              <span class="ty-step-num">1</span>
+              <span class="ty-step-copy">
+                <strong>Hablar contigo</strong>
+                <small class="ty-step-detail">En curso ahora</small>
+              </span>
+            </li>
+            <li data-stage="saved">
+              <span class="ty-step-num">2</span>
+              <span class="ty-step-copy">
+                <strong>Guardar tu perfil</strong>
+                <small class="ty-step-detail">Después de hablar</small>
+              </span>
+            </li>
+            <li data-stage="recommendations">
+              <span class="ty-step-num">3</span>
+              <span class="ty-step-copy">
+                <strong>Ver empleos para ti</strong>
+                <small class="ty-step-detail">Al final</small>
+              </span>
+            </li>
+          </ol>
+          <div class="candidate-status-row">
+            <p id="candidateVerifyStatus" class="verify-status ty-sr-only">Cargando enlace</p>
+            <button id="continueRecommendationsButton" class="primary-action" type="button" hidden>
+              <i data-lucide="arrow-right"></i>
+              <span>Ver empleos para ti</span>
+            </button>
+          </div>
+          <p class="ty-journey-note">¿Tienes dudas? Puedes hablar con el asesor en cualquier momento, no hay respuestas incorrectas.</p>
         </section>
       </aside>
     </main>

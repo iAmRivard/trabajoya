@@ -307,6 +307,11 @@ body.recommendations-mode .text-composer {
   display: none;
 }
 
+body.candidate-mode.ty-v2.recommendations-mode .ty-conversation-card,
+body.candidate-mode.ty-v2.recommendations-mode .ty-cv-card {
+  display: none;
+}
+
 body.interview-mode .recommendations-grid,
 body.interview-mode .profile-gaps {
   display: none;
@@ -1212,5 +1217,1054 @@ body.interview-mode .profile-gaps {
 
   .cv-row {
     grid-template-columns: 1fr;
+  }
+}
+
+/* --- Candidate UI v2 (scoped) --- */
+
+body.candidate-mode.ty-v2 {
+  --ty-bg: #fff6ee;
+  --ty-brand: #b03a2e;
+  --ty-text: #3a2a24;
+  --ty-muted: #8a7268;
+  --ty-muted-light: #b0a196;
+  --ty-surface: #ffffff;
+  --ty-surface-soft: #f3e9dd;
+  --ty-radius-lg: 24px;
+  --ty-radius-md: 18px;
+  --ty-font: Nunito, ui-sans-serif, system-ui, sans-serif;
+  --ty-shadow: 0 8px 26px rgba(59, 32, 20, 0.07);
+  font-family: var(--ty-font);
+  color: var(--ty-text);
+  background: var(--ty-bg);
+}
+
+body.candidate-mode.ty-v2 .app-shell {
+  width: min(1080px, calc(100% - 48px));
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding: 40px 0 80px;
+}
+
+body.candidate-mode.ty-v2 .workspace,
+body.candidate-mode.ty-v2 .side-panel {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: auto;
+  padding: 0;
+}
+
+body.candidate-mode.ty-v2 .workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+body.candidate-mode.ty-v2 .ty-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+body.candidate-mode.ty-v2 .ty-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--ty-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.candidate-mode.ty-v2 .ty-logo-text {
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+body.candidate-mode.ty-v2 .ty-logo .mark-line,
+body.candidate-mode.ty-v2 .ty-logo .mark-dot {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-eyebrow {
+  margin: 0;
+  color: var(--ty-brand);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+body.candidate-mode.ty-v2 h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+body.candidate-mode.ty-v2 .status-strip {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ty-surface);
+  border-radius: 999px;
+  padding: 10px 18px;
+  box-shadow: 0 4px 14px rgba(59, 32, 20, 0.06);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+body.candidate-mode.ty-v2 .ty-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3fa66a;
+  flex-shrink: 0;
+}
+
+body.candidate-mode.ty-v2.ty-state-thinking .ty-status-dot {
+  background: #e8a317;
+  animation: ty-pulse-dot 1.2s ease-in-out infinite;
+}
+
+body.candidate-mode.ty-v2.ty-state-speaking .ty-status-dot {
+  background: var(--ty-brand);
+}
+
+body.candidate-mode.ty-v2.ty-state-error .ty-status-dot {
+  background: #c0392b;
+}
+
+body.candidate-mode.ty-v2 .ty-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+body.candidate-mode.ty-v2 .ty-conversation-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+body.candidate-mode.ty-v2 .ty-conversation-card {
+  background: var(--ty-surface);
+  border-radius: var(--ty-radius-lg);
+  padding: 28px;
+  box-shadow: var(--ty-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+body.candidate-mode.ty-v2 .ty-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.candidate-mode.ty-v2 .ty-chat-bubble {
+  max-width: 78%;
+  padding: 14px 18px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  border-radius: var(--ty-radius-md) var(--ty-radius-md) var(--ty-radius-md) 4px;
+}
+
+body.candidate-mode.ty-v2 .ty-chat-bubble.is-agent {
+  align-self: flex-start;
+  background: var(--ty-bg);
+  color: var(--ty-text);
+}
+
+body.candidate-mode.ty-v2 .ty-chat-bubble.is-user {
+  align-self: flex-end;
+  background: var(--ty-surface-soft);
+  color: var(--ty-text);
+  border-radius: var(--ty-radius-md) var(--ty-radius-md) 4px var(--ty-radius-md);
+}
+
+body.candidate-mode.ty-v2 .ty-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 14px 18px;
+  background: var(--ty-bg);
+  border-radius: var(--ty-radius-md) var(--ty-radius-md) var(--ty-radius-md) 4px;
+  color: var(--ty-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+body.candidate-mode.ty-v2 .ty-thinking-global {
+  align-self: stretch;
+  max-width: none;
+  background: var(--ty-surface);
+  box-shadow: var(--ty-shadow);
+  margin-bottom: 4px;
+}
+
+body.candidate-mode.ty-v2 .ty-thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+body.candidate-mode.ty-v2 .ty-thinking-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ty-brand);
+  animation: ty-dot-bounce 1.2s ease-in-out infinite;
+}
+
+body.candidate-mode.ty-v2 .ty-thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+body.candidate-mode.ty-v2 .ty-thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ty-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes ty-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.15);
+  }
+}
+
+body.candidate-mode.ty-v2 .voice-surface {
+  border: none;
+  padding: 8px 0 0;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+body.candidate-mode.ty-v2 .voice-orbit {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .session-copy {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 12px 8px 4px;
+  flex-wrap: wrap;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button {
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  min-height: 120px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: linear-gradient(160deg, #e2543f, #b03a2e);
+  box-shadow: 0 14px 30px rgba(176, 58, 46, 0.35);
+  color: #fff;
+  flex-direction: column;
+  gap: 0;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button svg {
+  width: 38px;
+  height: 38px;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button::after {
+  content: "Hablar ahora";
+  position: absolute;
+  left: calc(100% + 28px);
+  width: max-content;
+  max-width: 34ch;
+  color: var(--ty-brand);
+  font-weight: 800;
+  font-size: 17px;
+  text-align: left;
+  line-height: 1.3;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button::before {
+  content: "Habla como si fuera una llamada normal. Puedes detenerte cuando quieras.";
+  position: absolute;
+  left: calc(100% + 28px);
+  top: 1.6em;
+  width: max-content;
+  max-width: 34ch;
+  color: var(--ty-muted);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button {
+  position: relative;
+}
+
+body.candidate-mode.ty-v2 .ty-mic-button:disabled {
+  opacity: 0.55;
+}
+
+body.candidate-mode.ty-v2.ty-state-thinking .ty-mic-button:not(:disabled) {
+  animation: ty-mic-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ty-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 14px 30px rgba(176, 58, 46, 0.35);
+  }
+  50% {
+    box-shadow: 0 14px 36px rgba(176, 58, 46, 0.55);
+  }
+}
+
+body.candidate-mode.ty-v2 .ty-secondary-controls {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+body.candidate-mode.ty-v2 .ty-secondary-controls button {
+  border-radius: 14px;
+  border-color: var(--ty-surface-soft);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+body.candidate-mode.ty-v2 .controls:not(.ty-voice-controls) {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
+  align-items: center;
+  border: none;
+  padding: 24px;
+  background: var(--ty-surface);
+  border-radius: var(--ty-radius-lg);
+  box-shadow: var(--ty-shadow);
+}
+
+body.candidate-mode.ty-v2 .ty-cv-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a5a3c;
+  background: repeating-linear-gradient(135deg, #ffe4d1, #ffe4d1 8px, #ffd9bd 8px, #ffd9bd 16px);
+}
+
+body.candidate-mode.ty-v2 .ty-cv-title {
+  margin: 0 0 4px;
+  font-weight: 800;
+  font-size: 15.5px;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-subtitle {
+  margin: 0;
+  color: var(--ty-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-subtitle[data-kind="error"] {
+  color: #b93525;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-form {
+  display: contents;
+}
+
+body.candidate-mode.ty-v2 .cv-row {
+  display: contents;
+}
+
+body.candidate-mode.ty-v2 .cv-row input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+body.candidate-mode.ty-v2 .ty-cv-upload {
+  flex-shrink: 0;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 14px;
+  border: none;
+  background: var(--ty-brand);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-upload:hover:not(:disabled) {
+  background: #962f25;
+  border-color: transparent;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-send {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-skip {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 56px;
+  border-radius: 16px;
+  border: 2px solid #e6d3c4;
+  background: transparent;
+  color: #8a5a3c;
+  font-weight: 800;
+  font-size: 16px;
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-cv-preview {
+  grid-column: 1 / -1;
+}
+
+body.candidate-mode.ty-v2 .ty-gate-mobile {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .side-panel {
+  background: var(--ty-surface);
+  border-radius: var(--ty-radius-lg);
+  padding: 24px;
+  box-shadow: var(--ty-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+body.candidate-mode.ty-v2 .ty-panel-header,
+body.candidate-mode.ty-v2 #activityView {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 #candidateGate {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+body.candidate-mode.ty-v2 .ty-journey-panel .ty-journey-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+body.candidate-mode.ty-v2 .ty-journey-panel .ty-journey-note {
+  margin: 0;
+  color: var(--ty-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  padding-top: 18px;
+  border-top: 1px solid var(--ty-surface-soft);
+}
+
+body.candidate-mode.ty-v2 .ty-journey {
+  counter-reset: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.candidate-mode.ty-v2 .ty-journey li {
+  min-height: auto;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  justify-items: start;
+}
+
+body.candidate-mode.ty-v2 .ty-journey li::before {
+  content: none;
+}
+
+body.candidate-mode.ty-v2 .ty-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+  background: var(--ty-surface-soft);
+  color: var(--ty-muted);
+}
+
+body.candidate-mode.ty-v2 .ty-journey li.is-active .ty-step-num {
+  background: var(--ty-brand);
+  color: #fff;
+}
+
+body.candidate-mode.ty-v2 .ty-journey li.is-done .ty-step-num {
+  background: var(--ty-brand);
+  color: #fff;
+  opacity: 0.75;
+}
+
+body.candidate-mode.ty-v2 .ty-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.candidate-mode.ty-v2 .ty-step-copy strong {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--ty-muted);
+}
+
+body.candidate-mode.ty-v2 .ty-journey li.is-active .ty-step-copy strong {
+  color: var(--ty-text);
+}
+
+body.candidate-mode.ty-v2 .ty-step-detail {
+  color: var(--ty-muted-light);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+body.candidate-mode.ty-v2 .ty-journey li.is-active .ty-step-detail {
+  color: var(--ty-muted);
+}
+
+body.candidate-mode.ty-v2 .candidate-gate.ty-journey-panel {
+  display: flex;
+  border: none;
+  padding: 0;
+  background: transparent;
+  grid-template-columns: 1fr;
+}
+
+body.candidate-mode.ty-v2 .candidate-status-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body.candidate-mode.ty-v2 .candidate-status-row .primary-action {
+  width: 100%;
+}
+
+body.candidate-mode.ty-v2 .text-composer {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .recommendations-panel {
+  border: none;
+  padding: 0;
+}
+
+body.candidate-mode.ty-v2 .ty-rec-eyebrow {
+  color: var(--ty-brand);
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
+}
+
+body.candidate-mode.ty-v2 .recommendations-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+body.candidate-mode.ty-v2 .recommendations-actions {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-courses-column,
+body.candidate-mode.ty-v2 .profile-gaps,
+body.candidate-mode.ty-v2 .recommendations-meta,
+body.candidate-mode.ty-v2 .recommendations-status {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-jobs-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+body.candidate-mode.ty-v2 .ty-jobs-title {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-job-cards {
+  display: contents;
+}
+
+body.candidate-mode.ty-v2 .recommendation-column:has(.ty-job-cards) {
+  display: contents;
+}
+
+body.candidate-mode.ty-v2 .ty-job-card {
+  background: var(--ty-surface);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(59, 32, 20, 0.08);
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.candidate-mode.ty-v2 .ty-job-card-logo {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(135deg, #ffd9bd, #ffd9bd 10px, #ffcaa4 10px, #ffcaa4 20px);
+  color: #8a5a3c;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+body.candidate-mode.ty-v2 .ty-job-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.candidate-mode.ty-v2 .ty-job-card-body h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+body.candidate-mode.ty-v2 .ty-job-card-meta {
+  margin: 0;
+  color: var(--ty-muted);
+  font-size: 13px;
+}
+
+body.candidate-mode.ty-v2 .ty-fit-badge {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+body.candidate-mode.ty-v2 .ty-fit-badge.is-high {
+  background: #fde3da;
+  color: var(--ty-brand);
+}
+
+body.candidate-mode.ty-v2 .ty-fit-badge.is-mid {
+  background: #fdeecb;
+  color: #8a6b18;
+}
+
+body.candidate-mode.ty-v2 .ty-fit-badge.is-low {
+  background: #f3e9dd;
+  color: var(--ty-muted);
+}
+
+body.candidate-mode.ty-v2 .ty-job-practice {
+  width: 100%;
+  height: 44px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 12px;
+  background: var(--ty-brand);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+body.candidate-mode.ty-v2 .ty-job-practice:hover:not(:disabled) {
+  background: #962f25;
+  border-color: transparent;
+}
+
+body.candidate-mode.ty-v2 .recommendations-loading {
+  border: none;
+  background: var(--ty-bg);
+  border-radius: var(--ty-radius-md);
+  color: var(--ty-text);
+  font-weight: 700;
+}
+
+body.candidate-mode.ty-v2 .recommendations-loading span:not(.ty-thinking-dots) {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .interview-panel {
+  display: grid;
+  gap: 20px;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-shell {
+  gap: 20px;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-session {
+  margin-top: 0;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-session .ty-interview-chat {
+  min-height: 120px;
+  max-height: min(42vh, 320px);
+  overflow: auto;
+  flex: 1;
+}
+
+body.candidate-mode.ty-v2.interview-mode .ty-interview-intro {
+  display: none;
+}
+
+body.candidate-mode.ty-v2.interview-mode.ty-state-speaking .ty-interview-status,
+body.candidate-mode.ty-v2.interview-mode.ty-state-listening .ty-interview-status,
+body.candidate-mode.ty-v2.interview-mode.ty-state-thinking .ty-interview-status {
+  color: var(--ty-brand);
+}
+
+body.candidate-mode.ty-v2 .ty-outline-button {
+  border: 2px solid #e6d3c4;
+  background: transparent;
+  color: #8a5a3c;
+  font-weight: 800;
+  border-radius: 14px;
+}
+
+body.candidate-mode.ty-v2 .ty-outline-button:hover:not(:disabled) {
+  border-color: var(--ty-brand);
+  color: var(--ty-brand);
+  background: var(--ty-bg);
+}
+
+body.candidate-mode.ty-v2 .ty-empty-state {
+  grid-column: 1 / -1;
+  padding: 28px 24px;
+  border-radius: var(--ty-radius-lg);
+  background: var(--ty-surface);
+  box-shadow: var(--ty-shadow);
+  color: var(--ty-muted);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-heading {
+  margin: 0 0 4px;
+  color: var(--ty-brand);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+body.candidate-mode.ty-v2.interview-mode .ty-interview-shell:has(.ty-interview-feedback:not([hidden])) .ty-interview-session {
+  display: none;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-feedback-header {
+  margin-bottom: 4px;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-feedback .ty-chat-bubble {
+  margin-bottom: 4px;
+}
+
+body.candidate-mode.ty-v2.interview-mode .ty-interview-shell:has(.ty-interview-feedback:not([hidden])) .ty-interview-job {
+  margin-bottom: 0;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+body.candidate-mode.ty-v2 .ty-back-link {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ty-surface-soft);
+  background: var(--ty-bg);
+  color: var(--ty-muted);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+body.candidate-mode.ty-v2 .ty-back-link:hover:not(:disabled) {
+  border-color: var(--ty-brand);
+  color: var(--ty-brand);
+}
+
+body.candidate-mode.ty-v2 .ty-interview-header h3 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-header p {
+  margin: 0;
+  color: var(--ty-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-job {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-job-card {
+  max-width: none;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-controls {
+  padding: 8px 0 0;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-mic::after {
+  content: "Practicar ahora";
+}
+
+body.candidate-mode.ty-v2 .ty-interview-mic::before {
+  content: "Responde con calma, como en una entrevista real.";
+}
+
+body.candidate-mode.ty-v2 .ty-interview-status {
+  margin: 0;
+  text-align: center;
+  color: var(--ty-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-status[data-kind="error"] {
+  color: #b93525;
+}
+
+body.candidate-mode.ty-v2 .ty-interview-feedback {
+  display: grid;
+  gap: 14px;
+  border: none;
+  padding: 0;
+  padding-top: 8px;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-section {
+  background: var(--ty-bg);
+  border-radius: var(--ty-radius-md);
+  padding: 14px 16px;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-section strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ty-brand);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ty-text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+body.candidate-mode.ty-v2 .ty-feedback-section p {
+  margin: 0;
+  color: var(--ty-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body.candidate-mode.ty-v2.interview-mode .recommendations-header,
+body.candidate-mode.ty-v2.interview-mode .ty-jobs-grid {
+  display: none;
+}
+
+body.candidate-mode.ty-v2.interview-mode .recommendations-panel {
+  display: grid;
+  gap: 0;
+}
+
+body.candidate-mode.ty-v2 .verify-status[data-kind="error"]:not(.ty-sr-only) {
+  color: #b93525;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body.candidate-mode.ty-v2 .primary-action {
+  border-color: var(--ty-brand);
+  background: var(--ty-brand);
+}
+
+body.candidate-mode.ty-v2 .primary-action:hover:not(:disabled) {
+  border-color: #962f25;
+  background: #962f25;
+}
+
+body.candidate-mode.ty-v2 .candidate-status-row .primary-action {
+  width: 100%;
+  border-radius: 14px;
+  font-weight: 800;
+}
+
+body.candidate-mode.ty-v2 .side-panel .candidate-status-row .primary-action {
+  width: 100%;
+}
+
+body.candidate-mode.ty-v2 .ty-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+body.candidate-mode.ty-v2.ty-state-processing .ty-status-dot {
+  background: #e8a317;
+  animation: ty-pulse-dot 1.2s ease-in-out infinite;
+}
+
+@media (max-width: 900px) {
+  body.candidate-mode.ty-v2 .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  body.candidate-mode.ty-v2 .ty-jobs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.candidate-mode.ty-v2 .ty-interview-mic::after,
+  body.candidate-mode.ty-v2 .ty-interview-mic::before {
+    display: none;
+  }
+
+  body.candidate-mode.ty-v2 .ty-mic-button::after,
+  body.candidate-mode.ty-v2 .ty-mic-button::before {
+    display: none;
+  }
+
+  body.candidate-mode.ty-v2 .ty-voice-controls {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  body.candidate-mode.ty-v2 .ty-secondary-controls {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  body.candidate-mode.ty-v2 .ty-cv-card {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  body.candidate-mode.ty-v2 .ty-cv-icon {
+    margin: 0 auto;
+  }
+
+  body.candidate-mode.ty-v2 .ty-cv-upload {
+    width: 100%;
+  }
+
+  body.candidate-mode.ty-v2 .ty-cv-skip {
+    display: inline-flex;
+  }
+
+  body.candidate-mode.ty-v2 .ty-mic-button {
+    width: 130px;
+    height: 130px;
+    min-height: 130px;
+  }
+}
+
+@media (max-width: 620px) {
+  body.candidate-mode.ty-v2 .app-shell {
+    width: min(100% - 20px, 1080px);
+    padding: 10px 0 40px;
   }
 }
