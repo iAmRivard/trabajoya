@@ -27,7 +27,7 @@ const exaSearchTimeoutMs = 25000;
 const openAiMatchTimeoutMs = 45000;
 const defaultVoiceFeedbackTimeoutMs = 12000;
 const defaultVoiceFeedbackMaxChars = 700;
-const defaultVoiceFeedbackMessageText = 'Recomendaciones.';
+const defaultVoiceFeedbackMessageText = '{recommendations}';
 const defaultExaJobFreshDays = 45;
 const defaultExaJobMaxAgeHours = 6;
 const adminCookieName = 'trabajoya_admin';
@@ -1609,10 +1609,24 @@ async function findInterviewVoiceDelivery(db, sessionId) {
       simulations.*,
       intakes.phone_e164,
       intakes.code as intake_code,
-      intakes.full_name as intake_full_name
+      intakes.full_name as intake_full_name,
+      recommendation_runs.result as recommendation_result
     from public.candidate_interview_simulations simulations
     join public.candidate_intakes intakes
       on intakes.id = simulations.intake_id
+    left join lateral (
+      select runs.result
+      from public.candidate_recommendation_runs runs
+      where runs.status = 'success'
+        and (
+          runs.id = simulations.recommendation_run_id
+          or runs.intake_id = simulations.intake_id
+        )
+      order by
+        case when runs.id = simulations.recommendation_run_id then 0 else 1 end,
+        runs.created_at desc
+      limit 1
+    ) recommendation_runs on true
     where simulations.id = $1
     limit 1
     `,
@@ -1692,15 +1706,65 @@ function buildVoiceFeedbackFollowupMessage(session) {
   const template = getVoiceFeedbackMessageText();
   const code = cleanText(session?.intake_code);
   const link = code ? buildCandidateUrlFromEnv(code) : '';
+  const recommendations = buildVoiceFeedbackRecommendationText(session, { link });
+  const normalizedTemplate = cleanText(template);
+
+  if (!normalizedTemplate || normalizedTemplate === 'Recomendaciones.' || normalizedTemplate === defaultVoiceFeedbackMessageText) {
+    return recommendations || limitChars(['TrabajoYA: recomendaciones disponibles.', link].filter(Boolean).join(' '), 900);
+  }
 
   return limitChars(
-    template
+    normalizedTemplate
       .replaceAll('{code}', code)
       .replaceAll('{link}', link)
+      .replaceAll('{recommendations}', recommendations)
       .replace(/\s+/g, ' ')
       .trim(),
-    900,
+    1800,
   );
+}
+
+function buildVoiceFeedbackRecommendationText(session, { link = '' } = {}) {
+  const result = session?.recommendation_result && typeof session.recommendation_result === 'object' ? session.recommendation_result : {};
+  const recommendations =
+    result.recommendations && typeof result.recommendations === 'object' ? result.recommendations : {};
+  const jobs = Array.isArray(recommendations.jobs) ? recommendations.jobs.slice(0, 3) : [];
+  const courses = Array.isArray(recommendations.courses) ? recommendations.courses.slice(0, 3) : [];
+  const lines = ['TrabajoYA: recomendaciones segun tu perfil.'];
+
+  if (jobs.length > 0) {
+    lines.push('Empleos:');
+    for (const [index, job] of jobs.entries()) {
+      lines.push(formatVoiceRecommendationItem(index + 1, job, 'job'));
+    }
+  }
+
+  if (courses.length > 0) {
+    lines.push('Cursos:');
+    for (const [index, course] of courses.entries()) {
+      lines.push(formatVoiceRecommendationItem(index + 1, course, 'course'));
+    }
+  }
+
+  if (jobs.length === 0 && courses.length === 0) return '';
+  if (link) lines.push(`Abrir perfil: ${link}`);
+
+  return limitChars(lines.filter(Boolean).join('\n'), 1800);
+}
+
+function formatVoiceRecommendationItem(index, item, type) {
+  const title = cleanText(item.title) || (type === 'job' ? 'Vacante recomendada' : 'Curso recomendado');
+  const organization = cleanText(type === 'job' ? item.company : item.provider);
+  const score = normalizeOptionalScore(item.score);
+  const sourceUrl = cleanText(item.source_url);
+  const parts = [
+    `${index}. ${title}`,
+    organization ? `- ${organization}` : '',
+    score !== null ? `(${score}% match)` : '',
+    sourceUrl,
+  ];
+
+  return parts.filter(Boolean).join(' ');
 }
 
 function buildInterviewVoiceFeedbackText(session) {
