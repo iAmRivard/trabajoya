@@ -90,7 +90,11 @@ async function elevenLabsFetch(path, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(data?.detail?.message || data?.detail || data?.message || `ElevenLabs error ${response.status}`);
+    const detail =
+      typeof data?.detail === 'object'
+        ? JSON.stringify(data.detail)
+        : data?.detail?.message || data?.detail || data?.message || JSON.stringify(data || {});
+    throw new Error(detail || `ElevenLabs error ${response.status}`);
   }
 
   return data;
