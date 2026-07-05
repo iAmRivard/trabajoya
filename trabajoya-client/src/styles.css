@@ -446,17 +446,27 @@ body.candidate-mode[data-candidate-view="profile"] .candidate-gate {
   padding: 11px 12px;
 }
 
-body.candidate-mode[data-candidate-view="profile"] .candidate-gate .eyebrow,
-body.candidate-mode[data-candidate-view="profile"] .candidate-flow {
+body.candidate-mode[data-candidate-view="profile"] .candidate-gate > div {
   display: none;
 }
 
-body.candidate-mode[data-candidate-view="profile"] .candidate-gate h2 {
-  margin-bottom: 3px;
-  font-size: 0.98rem;
+body.candidate-mode[data-candidate-view="profile"] .candidate-flow {
+  grid-template-columns: repeat(5, minmax(58px, 1fr));
+  gap: 5px;
+  overflow: visible;
 }
 
-body.candidate-mode[data-candidate-view="profile"] .candidate-gate p,
+body.candidate-mode[data-candidate-view="profile"] .candidate-flow li {
+  min-height: 42px;
+  padding: 6px 5px;
+  font-size: 0.66rem;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .candidate-flow li::before {
+  width: 19px;
+  height: 19px;
+}
+
 body.candidate-mode[data-candidate-view="profile"] .verify-status {
   font-size: 0.88rem;
   line-height: 1.35;
@@ -638,12 +648,38 @@ body.candidate-mode .session-copy p {
   line-height: 1.5;
 }
 
-body.candidate-mode[data-candidate-view="profile"] .voice-orbit {
-  display: none;
+body.candidate-mode[data-candidate-view="profile"] .voice-surface {
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
 }
 
-body.candidate-mode[data-candidate-view="profile"] .voice-surface {
-  padding: 13px;
+body.candidate-mode[data-candidate-view="profile"] .voice-orbit {
+  min-height: 58px;
+  height: 58px;
+  grid-template-columns: repeat(5, minmax(5px, 1fr));
+  gap: 4px;
+  padding: 8px;
+  background: #f7fbf7;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .voice-orbit span {
+  min-height: 18px;
+  border-radius: 999px;
+  animation-play-state: paused;
+  opacity: 0.72;
+  transform: scaleY(0.48);
+}
+
+body.voice-active.candidate-mode[data-candidate-view="profile"] .voice-orbit span {
+  animation-play-state: running;
+  opacity: 1;
+}
+
+body.voice-agent-speaking.candidate-mode[data-candidate-view="profile"] .voice-orbit {
+  border-color: #b9cfbf;
+  background: #edf7f0;
 }
 
 body.candidate-mode[data-candidate-view="profile"] .session-copy h2 {
@@ -1770,6 +1806,11 @@ body.candidate-mode .candidate-bottom-action button {
     grid-template-columns: repeat(5, minmax(66px, 1fr));
   }
 
+  body.candidate-mode[data-candidate-view="profile"] .candidate-flow {
+    grid-template-columns: repeat(5, minmax(54px, 1fr));
+    gap: 4px;
+  }
+
   body.candidate-mode .candidate-status-row {
     flex-direction: row;
   }
@@ -1796,6 +1837,7 @@ body.candidate-mode .candidate-bottom-action button {
 
 body.candidate-mode.recommendations-mode .controls,
 body.candidate-mode.interview-mode .controls,
+body.candidate-mode[data-candidate-view="profile"] .controls,
 body.candidate-mode[data-candidate-view="feedback"] .controls,
 body.candidate-mode .interview-controls {
   display: none;

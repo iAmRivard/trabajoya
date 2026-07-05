@@ -19,6 +19,7 @@ const port = Number(process.env.API_PORT || 8787);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const maxCvTextLength = 12000;
 const defaultRecommendationMaxResults = 5;
+const defaultRecommendationMaxCourses = 3;
 const maxRecommendationMaxResults = 10;
 const recommendationPreRankLimit = 20;
 const defaultMatchCooldownSeconds = 60;
@@ -271,6 +272,7 @@ app.post('/api/intakes/:code/recommendations', async (request, response) => {
     const db = getPool();
     const code = normalizeCode(request.params.code);
     const maxResults = getRecommendationMaxResults(request.body);
+    const maxCourses = getRecommendationMaxCourses(request.body, maxResults);
     const { intake, profile } = await findIntakeProfileByCode(db, code);
 
     if (!intake) {
@@ -304,6 +306,7 @@ app.post('/api/intakes/:code/recommendations', async (request, response) => {
       profile,
       requestedBy: 'candidate',
       maxResults,
+      maxCourses,
     });
 
     response.json(serializeRecommendationRun(run, { cached: false }));
@@ -552,6 +555,7 @@ app.post('/api/profiles/:profileId/recommendations', requireAdminSession, async 
     const db = getPool();
     const profileId = normalizeUuid(request.params.profileId);
     const maxResults = getRecommendationMaxResults(request.body);
+    const maxCourses = getRecommendationMaxCourses(request.body, maxResults);
     const { intake, profile } = await findProfileWithIntakeById(db, profileId);
 
     if (!profile) {
@@ -577,6 +581,7 @@ app.post('/api/profiles/:profileId/recommendations', requireAdminSession, async 
       profile,
       requestedBy: 'admin',
       maxResults,
+      maxCourses,
     });
 
     response.json(serializeRecommendationRun(run, { cached: false }));
@@ -1124,7 +1129,7 @@ async function findProfileWithIntakeById(db, profileId) {
   };
 }
 
-async function createProfileRecommendations(db, { intake, profile, requestedBy, maxResults }) {
+async function createProfileRecommendations(db, { intake, profile, requestedBy, maxResults, maxCourses }) {
   const model = getOpenAiMatchModel();
   const profileSnapshot = buildRecommendationProfileSnapshot(profile, intake);
   const searchQueries = buildRecommendationSearchConfigs(profileSnapshot, maxResults);
@@ -1158,6 +1163,7 @@ async function createProfileRecommendations(db, { intake, profile, requestedBy, 
             profileSnapshot,
             candidates,
             maxResults,
+            maxCourses,
             model,
           });
 
@@ -1852,6 +1858,13 @@ function getRecommendationMaxResults(body = {}) {
   const requested = Number(body.max_results ?? body.maxResults ?? body.limit ?? configured);
 
   return clampNumber(requested, 1, maxRecommendationMaxResults);
+}
+
+function getRecommendationMaxCourses(body = {}, maxResults = defaultRecommendationMaxResults) {
+  const configured = Number(process.env.MATCH_MAX_COURSES || defaultRecommendationMaxCourses);
+  const requested = Number(body.max_courses ?? body.maxCourses ?? configured);
+
+  return clampNumber(requested, 1, maxResults);
 }
 
 function getMatchCooldownSeconds() {
@@ -2580,7 +2593,7 @@ function countTermMatches(text, terms) {
   return uniqueCleanTexts(terms).filter((term) => text.includes(normalizeAscii(term).toLowerCase())).length;
 }
 
-async function buildOpenAiRecommendationMatch({ profileSnapshot, candidates, maxResults, model }) {
+async function buildOpenAiRecommendationMatch({ profileSnapshot, candidates, maxResults, maxCourses, model }) {
   const response = await fetchWithTimeout(
     'https://api.openai.com/v1/responses',
     {
@@ -2602,9 +2615,11 @@ async function buildOpenAiRecommendationMatch({ profileSnapshot, candidates, max
             content: JSON.stringify({
               profile: profileSnapshot,
               candidates: getCandidatesForModel(candidates),
-              max_results: maxResults,
+              max_jobs: maxResults,
+              max_courses: maxCourses,
               rules: [
-                'Selecciona maximo max_results empleos y maximo max_results cursos.',
+                'Selecciona maximo max_jobs empleos y maximo max_courses cursos.',
+                'Incluye hasta 3 cursos si hay cursos aplicables; si no aplican, devuelve menos cursos.',
                 'Usa solo job_id y course_id existentes en candidates.',
                 'Prioriza coincidencia de rol, habilidades, ubicacion, disponibilidad y brechas de aprendizaje.',
                 'Si un candidato es debil, explica concerns brevemente en vez de ocultarlo.',
@@ -2643,7 +2658,7 @@ async function buildOpenAiRecommendationMatch({ profileSnapshot, candidates, max
     throw new Error('openai_invalid_json');
   }
 
-  return validateAndReconcileRecommendationResult(parsed, candidates, maxResults);
+  return validateAndReconcileRecommendationResult(parsed, candidates, maxResults, maxCourses);
 }
 
 function getCandidatesForModel(candidates) {
@@ -2781,8 +2796,8 @@ function extractOpenAiOutputText(data) {
   return text;
 }
 
-function validateAndReconcileRecommendationResult(result, candidates, maxResults) {
-  const fallback = buildFallbackRecommendationResult(candidates, maxResults);
+function validateAndReconcileRecommendationResult(result, candidates, maxResults, maxCourses = maxResults) {
+  const fallback = buildFallbackRecommendationResult(candidates, maxResults, maxCourses);
   const jobMap = new Map(candidates.jobs.map((job) => [job.id, job]));
   const courseMap = new Map(candidates.courses.map((course) => [course.id, course]));
   const rawJobs = Array.isArray(result?.recommendations?.jobs) ? result.recommendations.jobs : [];
@@ -2823,7 +2838,7 @@ function validateAndReconcileRecommendationResult(result, candidates, maxResults
       };
     })
     .filter(Boolean)
-    .slice(0, maxResults);
+    .slice(0, maxCourses);
 
   return {
     summary:
@@ -2848,12 +2863,12 @@ function buildEmptyRecommendationResult() {
   };
 }
 
-function buildFallbackRecommendationResult(candidates, maxResults) {
+function buildFallbackRecommendationResult(candidates, maxResults, maxCourses = maxResults) {
   return {
     summary: 'Estas recomendaciones se basan en coincidencias directas entre el perfil y los resultados encontrados.',
     recommendations: {
       jobs: candidates.jobs.slice(0, maxResults).map(buildFallbackJobRecommendation),
-      courses: candidates.courses.slice(0, maxResults).map(buildFallbackCourseRecommendation),
+      courses: candidates.courses.slice(0, maxCourses).map(buildFallbackCourseRecommendation),
     },
     profile_gaps: [],
   };

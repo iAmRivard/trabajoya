@@ -295,6 +295,7 @@ function addEvent(kind, text) {
 }
 
 function setConnectedState(isConnected) {
+  document.body.classList.toggle('voice-active', isConnected);
   elements.startButton.disabled = isConnected || !canStartConversation() || Boolean(activeInterview);
   elements.stopButton.disabled = !isConnected;
   elements.muteButton.disabled = !isConnected;
@@ -314,6 +315,7 @@ function setConnectedState(isConnected) {
   }
 
   if (!isConnected) {
+    document.body.classList.remove('voice-agent-speaking');
     elements.agentStatus.textContent = 'En espera';
     muted = false;
     updateMuteButton();
@@ -1165,6 +1167,7 @@ async function fetchCandidateRecommendations() {
       },
       body: JSON.stringify({
         max_results: 5,
+        max_courses: 3,
       }),
     });
     const data = await response.json().catch(() => null);
@@ -1604,6 +1607,7 @@ async function startInterviewConversation() {
       },
       onModeChange: (mode) => {
         interviewAgentSpeaking = mode?.mode === 'speaking';
+        document.body.classList.toggle('voice-agent-speaking', interviewAgentSpeaking);
         elements.agentStatus.textContent = interviewAgentSpeaking ? 'Entrevistando' : 'Escuchando';
 
         if (interviewCloseAfterFeedback && !interviewAgentSpeaking) {
@@ -2141,6 +2145,7 @@ async function startConversation() {
       },
       onModeChange: (mode) => {
         candidateAgentSpeaking = mode?.mode === 'speaking';
+        document.body.classList.toggle('voice-agent-speaking', candidateAgentSpeaking);
         elements.agentStatus.textContent = candidateAgentSpeaking ? 'Hablando' : 'Escuchando';
 
         if (candidateCloseAfterSave && !candidateAgentSpeaking) {
