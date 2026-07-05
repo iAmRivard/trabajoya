@@ -109,6 +109,9 @@ function buildConversationConfig(config) {
 
   const prompt = typeof nextConfig.agent.prompt === 'object' && nextConfig.agent.prompt !== null ? nextConfig.agent.prompt : {};
   prompt.prompt = interviewPrompt;
+  delete prompt.tool_ids;
+  delete prompt.toolIds;
+  delete prompt.tools_ids;
   prompt.tools = [saveInterviewFeedbackTool()];
   prompt.built_in_tools = {
     ...(prompt.built_in_tools || {}),
