@@ -18,6 +18,12 @@ const app = express();
 const port = Number(process.env.API_PORT || 8787);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const maxCvTextLength = 12000;
+const defaultRecommendationMaxResults = 5;
+const maxRecommendationMaxResults = 10;
+const recommendationPreRankLimit = 20;
+const defaultMatchCooldownSeconds = 60;
+const exaSearchTimeoutMs = 25000;
+const openAiMatchTimeoutMs = 45000;
 const adminCookieName = 'trabajoya_admin';
 const adminSessionTtlSeconds = 60 * 60 * 8;
 const upload = multer({
@@ -249,6 +255,177 @@ app.post('/api/candidate-profiles', async (request, response) => {
     });
   } catch (error) {
     response.status(400).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.post('/api/intakes/:code/recommendations', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const maxResults = getRecommendationMaxResults(request.body);
+    const { intake, profile } = await findIntakeProfileByCode(db, code);
+
+    if (!intake) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    if (!profile) {
+      response.status(409).json({
+        ok: false,
+        error: 'Este registro aun no tiene un perfil confirmado.',
+      });
+      return;
+    }
+
+    const cachedRun = await findFreshRecommendationRun(db, {
+      intakeId: intake.id,
+      profileId: profile.id,
+    });
+
+    if (cachedRun) {
+      response.json(serializeRecommendationRun(cachedRun, { cached: true }));
+      return;
+    }
+
+    const run = await createProfileRecommendations(db, {
+      intake,
+      profile,
+      requestedBy: 'candidate',
+      maxResults,
+    });
+
+    response.json(serializeRecommendationRun(run, { cached: false }));
+  } catch (error) {
+    response.status(getRecommendationErrorStatus(error)).json({
+      ok: false,
+      run_id: error.recommendationRunId || null,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/intakes/:code/recommendations/latest', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const { intake, profile } = await findIntakeProfileByCode(db, code);
+
+    if (!intake) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    if (!profile) {
+      response.status(409).json({
+        ok: false,
+        error: 'Este registro aun no tiene un perfil confirmado.',
+      });
+      return;
+    }
+
+    const run = await findLatestRecommendationRunForIntake(db, intake.id);
+
+    if (!run) {
+      response.status(404).json({
+        ok: false,
+        error: 'Aun no hay recomendaciones para este perfil.',
+      });
+      return;
+    }
+
+    response.json(serializeRecommendationRun(run, { cached: true }));
+  } catch (error) {
+    response.status(getRecommendationErrorStatus(error)).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.post('/api/profiles/:profileId/recommendations', requireAdminSession, async (request, response) => {
+  try {
+    const db = getPool();
+    const profileId = normalizeUuid(request.params.profileId);
+    const maxResults = getRecommendationMaxResults(request.body);
+    const { intake, profile } = await findProfileWithIntakeById(db, profileId);
+
+    if (!profile) {
+      response.status(404).json({
+        ok: false,
+        error: 'Perfil no encontrado.',
+      });
+      return;
+    }
+
+    const cachedRun = await findFreshRecommendationRun(db, {
+      intakeId: intake?.id || null,
+      profileId: profile.id,
+    });
+
+    if (cachedRun) {
+      response.json(serializeRecommendationRun(cachedRun, { cached: true }));
+      return;
+    }
+
+    const run = await createProfileRecommendations(db, {
+      intake,
+      profile,
+      requestedBy: 'admin',
+      maxResults,
+    });
+
+    response.json(serializeRecommendationRun(run, { cached: false }));
+  } catch (error) {
+    response.status(getRecommendationErrorStatus(error)).json({
+      ok: false,
+      run_id: error.recommendationRunId || null,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/profiles/:profileId/recommendations', requireAdminSession, async (request, response) => {
+  try {
+    const db = getPool();
+    const profileId = normalizeUuid(request.params.profileId);
+    const limit = clampNumber(Number(request.query.limit || 10), 1, 50);
+    const { profile } = await findProfileWithIntakeById(db, profileId);
+
+    if (!profile) {
+      response.status(404).json({
+        ok: false,
+        error: 'Perfil no encontrado.',
+      });
+      return;
+    }
+
+    const result = await db.query(
+      `
+      select *
+      from public.candidate_recommendation_runs
+      where profile_id = $1
+      order by created_at desc
+      limit $2
+      `,
+      [profile.id, limit],
+    );
+
+    response.json({
+      ok: true,
+      recommendations: result.rows.map(serializeRecommendationRunListItem),
+    });
+  } catch (error) {
+    response.status(getRecommendationErrorStatus(error)).json({
       ok: false,
       error: getPublicError(error),
     });
@@ -692,6 +869,1277 @@ async function findIntakeByCode(db, code) {
   }
 
   return result.rows[0];
+}
+
+async function findIntakeProfileByCode(db, code) {
+  const result = await db.query(
+    `
+    select
+      i.*,
+      row_to_json(p) as profile_row
+    from public.candidate_intakes i
+    left join public.candidate_profiles p on p.id = i.profile_id
+    where i.code = $1
+    `,
+    [code],
+  );
+
+  if (result.rowCount === 0) {
+    return {
+      intake: null,
+      profile: null,
+    };
+  }
+
+  const row = result.rows[0];
+  const { profile_row: profileRow, ...intake } = row;
+
+  return {
+    intake,
+    profile: profileRow || null,
+  };
+}
+
+async function findProfileWithIntakeById(db, profileId) {
+  const result = await db.query(
+    `
+    select
+      p.*,
+      row_to_json(i) as intake_row
+    from public.candidate_profiles p
+    left join public.candidate_intakes i on i.id = p.intake_id
+    where p.id = $1
+    `,
+    [profileId],
+  );
+
+  if (result.rowCount === 0) {
+    return {
+      intake: null,
+      profile: null,
+    };
+  }
+
+  const row = result.rows[0];
+  const { intake_row: intakeRow, ...profile } = row;
+
+  return {
+    intake: intakeRow || null,
+    profile,
+  };
+}
+
+async function createProfileRecommendations(db, { intake, profile, requestedBy, maxResults }) {
+  const model = getOpenAiMatchModel();
+  const profileSnapshot = buildRecommendationProfileSnapshot(profile, intake);
+  const searchQueries = buildRecommendationSearchConfigs(profileSnapshot, maxResults);
+  let candidates = {
+    jobs: [],
+    courses: [],
+  };
+
+  try {
+    if (!getExaApiKey()) {
+      throw new Error('missing_exa_api_key');
+    }
+
+    if (!getOpenAiApiKey()) {
+      throw new Error('missing_openai_api_key');
+    }
+
+    const liveCandidates = await fetchLiveRecommendationCandidates(db, {
+      searchQueries,
+    });
+    const rankedCandidates = preRankRecommendationCandidates(liveCandidates, profileSnapshot);
+    candidates = {
+      jobs: rankedCandidates.jobs,
+      courses: rankedCandidates.courses,
+    };
+
+    const result =
+      candidates.jobs.length === 0 && candidates.courses.length === 0
+        ? buildEmptyRecommendationResult()
+        : await buildOpenAiRecommendationMatch({
+            profileSnapshot,
+            candidates,
+            maxResults,
+            model,
+          });
+
+    const resultWithSearch = {
+      ...result,
+      search: {
+        jobs_queries: searchQueries.jobs.map(({ query, includeDomains }) => ({ query, include_domains: includeDomains })),
+        courses_queries: searchQueries.courses.map(({ query, includeDomains }) => ({ query, include_domains: includeDomains })),
+        live_counts: {
+          jobs: liveCandidates.jobs.length,
+          courses: liveCandidates.courses.length,
+        },
+        considered_counts: {
+          jobs: candidates.jobs.length,
+          courses: candidates.courses.length,
+        },
+      },
+    };
+
+    return insertRecommendationRun(db, {
+      intakeId: intake?.id || null,
+      profileId: profile.id,
+      requestedBy,
+      status: 'success',
+      model,
+      profileSnapshot,
+      searchQueries,
+      candidates,
+      result: resultWithSearch,
+    });
+  } catch (error) {
+    const failedRun = await insertRecommendationRun(db, {
+      intakeId: intake?.id || null,
+      profileId: profile.id,
+      requestedBy,
+      status: 'failed',
+      model,
+      profileSnapshot,
+      searchQueries,
+      candidates,
+      result: {},
+      error: getPublicError(error),
+    });
+
+    error.recommendationRunId = failedRun.id;
+    throw error;
+  }
+}
+
+async function findFreshRecommendationRun(db, { intakeId, profileId }) {
+  const cooldownSeconds = getMatchCooldownSeconds();
+
+  if (cooldownSeconds <= 0) {
+    return null;
+  }
+
+  const result = await db.query(
+    `
+    select *
+    from public.candidate_recommendation_runs
+    where profile_id = $1
+      and ($2::uuid is null or intake_id = $2)
+      and status = 'success'
+      and created_at >= now() - ($3::int * interval '1 second')
+    order by created_at desc
+    limit 1
+    `,
+    [profileId, intakeId || null, cooldownSeconds],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function findLatestRecommendationRunForIntake(db, intakeId) {
+  const result = await db.query(
+    `
+    select *
+    from public.candidate_recommendation_runs
+    where intake_id = $1
+      and status = 'success'
+    order by created_at desc
+    limit 1
+    `,
+    [intakeId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function insertRecommendationRun(
+  db,
+  { intakeId, profileId, requestedBy, status, model, profileSnapshot, searchQueries, candidates, result, error = '' },
+) {
+  const saved = await db.query(
+    `
+    insert into public.candidate_recommendation_runs (
+      intake_id,
+      profile_id,
+      requested_by,
+      status,
+      source_mode,
+      model,
+      profile_snapshot,
+      search_queries,
+      candidates,
+      result,
+      error
+    )
+    values ($1, $2, $3, $4, 'live', $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+    returning *
+    `,
+    [
+      intakeId,
+      profileId,
+      requestedBy,
+      status,
+      model,
+      stringifyPostgresJson(profileSnapshot || {}),
+      stringifyPostgresJson(searchQueries || {}),
+      stringifyPostgresJson(candidates || {}),
+      stringifyPostgresJson(result || {}),
+      limitChars(error, 1000) || null,
+    ],
+  );
+
+  return saved.rows[0];
+}
+
+function serializeRecommendationRun(run, { cached }) {
+  const result = run.result && typeof run.result === 'object' ? run.result : {};
+
+  return {
+    ok: true,
+    run_id: run.id,
+    source: run.source_mode || 'live',
+    generated_at: run.created_at,
+    model: run.model || '',
+    cached,
+    summary: cleanText(result.summary),
+    recommendations: result.recommendations || { jobs: [], courses: [] },
+    profile_gaps: Array.isArray(result.profile_gaps) ? result.profile_gaps : [],
+    search: result.search || null,
+  };
+}
+
+function serializeRecommendationRunListItem(run) {
+  return {
+    run_id: run.id,
+    status: run.status,
+    requested_by: run.requested_by,
+    source: run.source_mode || 'live',
+    model: run.model || '',
+    created_at: run.created_at,
+    updated_at: run.updated_at,
+    error: run.error || '',
+    result: run.status === 'success' ? run.result : null,
+  };
+}
+
+function getRecommendationMaxResults(body = {}) {
+  const configured = Number(process.env.MATCH_MAX_RESULTS_PER_TYPE || defaultRecommendationMaxResults);
+  const requested = Number(body.max_results ?? body.maxResults ?? body.limit ?? configured);
+
+  return clampNumber(requested, 1, maxRecommendationMaxResults);
+}
+
+function getMatchCooldownSeconds() {
+  return clampNumber(
+    Number(process.env.MATCH_MIN_INTERVAL_SECONDS || defaultMatchCooldownSeconds),
+    0,
+    60 * 60,
+  );
+}
+
+function buildRecommendationProfileSnapshot(profileRow, intake = null) {
+  const profile = profileRow.profile || {};
+  const personal = profile.personal || {};
+  const jobGoal = profile.job_goal || {};
+  const skills = profile.skills || {};
+
+  return {
+    full_name: cleanText(personal.full_name || profileRow.full_name),
+    location: {
+      municipality: cleanText(personal.municipality || profileRow.municipality || intake?.municipality),
+      department: cleanText(personal.department || profileRow.department || intake?.department),
+    },
+    professional_summary: limitChars(profile.professional_summary, 1200),
+    desired_roles: normalizeTextArray(jobGoal.desired_roles || jobGoal.desired_role || intake?.desired_role),
+    desired_areas: normalizeTextArray(jobGoal.desired_areas || jobGoal.desired_area),
+    availability: cleanText(jobGoal.availability),
+    preferred_schedule: cleanText(jobGoal.preferred_schedule),
+    can_relocate: parseOptionalBoolean(jobGoal.can_relocate) ?? null,
+    education: summarizeProfileItems(profile.education),
+    experience: summarizeProfileItems(profile.experience),
+    informal_experience: summarizeProfileItems(profile.informal_experience),
+    skills: {
+      technical: normalizeTextArray(skills.technical),
+      soft: normalizeTextArray(skills.soft),
+      tools: normalizeTextArray(skills.tools),
+      languages: normalizeTextArray(skills.languages),
+    },
+    certifications_or_courses: summarizeProfileItems(profile.certifications_or_courses),
+    cv_gaps: normalizeTextArray(profile.cv_gaps),
+    recommended_next_steps: normalizeTextArray(profile.recommended_next_steps),
+  };
+}
+
+function summarizeProfileItems(value) {
+  const items = Array.isArray(value) ? value : cleanText(value) ? [value] : [];
+
+  return items
+    .map((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return cleanText(item);
+      }
+
+      return cleanText(
+        [
+          item.role || item.title || item.position || item.degree || item.name,
+          item.company || item.institution || item.organization,
+          item.duration || item.years || item.period,
+          item.description || item.summary || item.notes,
+        ]
+          .filter(Boolean)
+          .join(' - '),
+      );
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function buildRecommendationSearchConfigs(profileSnapshot, maxResults) {
+  const roleTerms = uniqueCleanTexts([...profileSnapshot.desired_roles, ...profileSnapshot.desired_areas]);
+  const skillTerms = uniqueCleanTexts([
+    ...profileSnapshot.skills.technical,
+    ...profileSnapshot.skills.tools,
+    ...profileSnapshot.skills.soft,
+  ]);
+  const gapTerms = uniqueCleanTexts([...profileSnapshot.cv_gaps, ...profileSnapshot.recommended_next_steps]);
+  const primaryGoal = joinSearchTerms(roleTerms, 'empleos');
+  const skillQuery = joinSearchTerms(skillTerms.slice(0, 6), '');
+  const courseFocus = joinSearchTerms([...gapTerms, ...skillTerms, ...roleTerms].slice(0, 8), primaryGoal);
+  const location = joinSearchTerms(
+    [profileSnapshot.location.municipality, profileSnapshot.location.department],
+    'El Salvador',
+  );
+  const numResults = Math.max(maxResults * 2, 8);
+  const primaryArea = roleTerms[0] || 'Perfil laboral';
+
+  return {
+    jobs: [
+      {
+        source: 'tecoloco',
+        provider: 'Tecoloco',
+        query: cleanSearchQuery(`site:tecoloco.com.sv empleos ${primaryGoal} ${skillQuery} ${location} El Salvador`),
+        includeDomains: ['tecoloco.com.sv', 'www.tecoloco.com.sv'],
+        area: primaryArea,
+        numResults,
+      },
+      {
+        source: 'computrabajo',
+        provider: 'Computrabajo',
+        query: cleanSearchQuery(`site:sv.computrabajo.com empleos ${primaryGoal} ${skillQuery} ${location} El Salvador`),
+        includeDomains: ['sv.computrabajo.com'],
+        area: primaryArea,
+        numResults,
+      },
+      {
+        source: 'mtps_oportunidades',
+        provider: 'Ministerio de Trabajo - Oportunidades',
+        query: cleanSearchQuery(`site:oportunidades.mtps.gob.sv/job-offers ofertas laborales ${primaryGoal} ${location}`),
+        includeDomains: ['oportunidades.mtps.gob.sv'],
+        area: primaryArea,
+        numResults,
+      },
+    ],
+    courses: [
+      {
+        source: 'platzi',
+        provider: 'Platzi',
+        query: cleanSearchQuery(`site:platzi.com/cursos curso Platzi ${courseFocus}`),
+        includeDomains: ['platzi.com'],
+        urlIncludes: ['/cursos/'],
+        area: primaryArea,
+        modality: 'online',
+        isFree: null,
+        numResults,
+      },
+      {
+        source: 'platzi',
+        provider: 'Platzi',
+        query: cleanSearchQuery(`site:platzi.com/cursos ${primaryGoal} ${skillQuery} habilidades profesionales`),
+        includeDomains: ['platzi.com'],
+        urlIncludes: ['/cursos/'],
+        area: primaryArea,
+        modality: 'online',
+        isFree: null,
+        numResults,
+      },
+      {
+        source: 'incaf',
+        provider: 'INCAF',
+        query: cleanSearchQuery(`site:incaf.gob.sv cursos formacion ${courseFocus} El Salvador`),
+        includeDomains: ['incaf.gob.sv', 'www.incaf.gob.sv'],
+        area: primaryArea,
+        modality: 'mixta',
+        isFree: true,
+        numResults,
+      },
+    ],
+  };
+}
+
+function joinSearchTerms(values, fallback) {
+  const text = uniqueCleanTexts(values).slice(0, 8).join(' ');
+
+  return text || fallback;
+}
+
+function cleanSearchQuery(value) {
+  return cleanText(value).replace(/\s+/g, ' ');
+}
+
+async function fetchLiveRecommendationCandidates(db, { searchQueries }) {
+  const [jobSearches, courseSearches] = await Promise.all([
+    Promise.all(searchQueries.jobs.map((config) => fetchExaSearch(config, 2600))),
+    Promise.all(searchQueries.courses.map((config) => fetchExaSearch(config, 2200))),
+  ]);
+  const jobs = [];
+  const courses = [];
+  const seenJobs = new Set();
+  const seenCourses = new Set();
+
+  for (const { config, results } of jobSearches) {
+    for (const result of results) {
+      if (!result?.url || !result?.title) continue;
+
+      const key = `${config.source}|${result.url}`;
+      if (seenJobs.has(key)) continue;
+      seenJobs.add(key);
+
+      const payload = normalizeExaJobResult(config, result);
+      if (!isUsefulJobTitle(payload.title)) continue;
+
+      try {
+        const normalized = normalizeJobPayload(payload, config.source);
+        const saved = await upsertJobVacancy(db, normalized);
+        jobs.push(buildJobCandidate(saved, normalized));
+      } catch (error) {
+        if (error?.message === 'missing_job_title') continue;
+        throw error;
+      }
+    }
+  }
+
+  for (const { config, results } of courseSearches) {
+    const allowedUrlParts = Array.isArray(config.urlIncludes) ? config.urlIncludes : [];
+
+    for (const result of results) {
+      if (!result?.url || !result?.title) continue;
+      if (allowedUrlParts.length > 0 && !allowedUrlParts.some((part) => result.url.includes(part))) continue;
+
+      const key = `${config.source}|${result.url}`;
+      if (seenCourses.has(key)) continue;
+      seenCourses.add(key);
+
+      const payload = normalizeExaCourseResult(config, result);
+
+      try {
+        const normalized = normalizeCoursePayload(payload, config.source);
+        const saved = await upsertCourse(db, normalized);
+        courses.push(buildCourseCandidate(saved, normalized));
+      } catch (error) {
+        if (error?.message === 'missing_course_title') continue;
+        throw error;
+      }
+    }
+  }
+
+  return {
+    jobs,
+    courses,
+  };
+}
+
+async function fetchExaSearch(config, maxCharacters) {
+  const response = await fetchWithTimeout(
+    'https://api.exa.ai/search',
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'x-api-key': getExaApiKey(),
+      },
+      body: JSON.stringify({
+        query: config.query,
+        includeDomains: config.includeDomains,
+        numResults: config.numResults || 8,
+        contents: {
+          highlights: true,
+          text: {
+            maxCharacters,
+          },
+        },
+      }),
+    },
+    exaSearchTimeoutMs,
+    'exa_request_timeout',
+  );
+
+  if (!response.ok) {
+    const error = new Error('exa_request_failed');
+    error.details = limitChars(await response.text(), 500);
+    throw error;
+  }
+
+  const data = await response.json();
+
+  return {
+    config,
+    results: Array.isArray(data.results) ? data.results : [],
+  };
+}
+
+function normalizeExaCourseResult(config, result) {
+  const title = cleanText(result.title || result.url);
+  const description = limitChars(getExaResultText(result) || title, 2500);
+  const skills = inferSkillsFromText(`${title} ${description}`);
+
+  return {
+    source: config.source,
+    external_id: result.url,
+    provider: config.provider,
+    title,
+    area: config.area,
+    description,
+    modality: config.modality,
+    country: 'El Salvador',
+    is_free: config.isFree,
+    cost: config.isFree ? 0 : null,
+    currency: 'USD',
+    skills,
+    target_roles: inferTargetRolesFromSkills(skills),
+    source_url: result.url,
+    status: 'active',
+    raw: {
+      exa_id: result.id,
+      published_date: result.publishedDate,
+      query: config.query,
+      score: result.score,
+      highlights: result.highlights || [],
+    },
+  };
+}
+
+function normalizeExaJobResult(config, result) {
+  const fullText = getExaResultText(result);
+  const title = cleanExaJobTitle(result.title || result.url, config.provider);
+  const salary = inferSalaryFromText(fullText);
+  const department = inferDepartmentFromText(fullText);
+
+  return {
+    source: config.source,
+    external_id: result.url,
+    provider: config.provider,
+    title,
+    company: '',
+    area: config.area,
+    description: limitChars(fullText, 4200),
+    employment_type: inferEmploymentTypeFromText(fullText),
+    modality: inferModalityFromText(fullText),
+    country: 'El Salvador',
+    department,
+    municipality: '',
+    location_text: department || 'El Salvador',
+    salary_min: salary.min,
+    salary_max: salary.max,
+    currency: 'USD',
+    expires_at: inferDateFromText(fullText),
+    skills: inferSkillsFromText(fullText),
+    source_url: result.url,
+    apply_url: result.url,
+    status: 'active',
+    raw: {
+      exa_id: result.id,
+      published_date: result.publishedDate,
+      query: config.query,
+      score: result.score,
+      highlights: result.highlights || [],
+    },
+  };
+}
+
+function getExaResultText(result) {
+  const highlights = Array.isArray(result.highlights) ? result.highlights.join('\n') : '';
+
+  return [result.title, highlights, result.text].map(cleanText).filter(Boolean).join('\n');
+}
+
+function cleanExaJobTitle(title, provider) {
+  return cleanText(title)
+    .replace(/\s+\|\s+.*$/i, '')
+    .replace(/\s+-\s+Computrabajo.*$/i, '')
+    .replace(/\s+-\s+Tecoloco.*$/i, '')
+    .replace(new RegExp(`\\s+-\\s+${escapeRegExp(provider)}.*$`, 'i'), '')
+    .trim();
+}
+
+function inferDepartmentFromText(text) {
+  const departments = [
+    'Ahuachapan',
+    'Cabanas',
+    'Chalatenango',
+    'Cuscatlan',
+    'La Libertad',
+    'La Paz',
+    'La Union',
+    'Morazan',
+    'San Miguel',
+    'San Salvador',
+    'San Vicente',
+    'Santa Ana',
+    'Sonsonate',
+    'Usulutan',
+  ];
+  const normalizedText = normalizeAscii(text).toLowerCase();
+
+  for (const department of departments) {
+    if (normalizedText.includes(normalizeAscii(department).toLowerCase())) {
+      return department;
+    }
+  }
+
+  return '';
+}
+
+function inferSalaryFromText(text) {
+  const normalized = cleanText(text);
+  const matches = [
+    ...normalized.matchAll(/(?:US\$|\$)\s*([0-9]{3,5}(?:[.,][0-9]{2})?)|([0-9]{3,5}(?:[.,][0-9]{2})?)\s*(?:US\$|dolares)/gi),
+  ];
+  const amounts = matches
+    .map((match) => Number(String(match[1] || match[2]).replace(',', '.')))
+    .filter((number) => Number.isFinite(number));
+
+  if (amounts.length === 0) {
+    return {
+      min: null,
+      max: null,
+    };
+  }
+
+  return {
+    min: Math.min(...amounts),
+    max: Math.max(...amounts),
+  };
+}
+
+function inferDateFromText(text) {
+  const normalized = cleanText(text);
+  const iso = normalized.match(/\b\d{4}-\d{2}-\d{2}\b/);
+
+  if (iso) return iso[0];
+
+  const slash = normalized.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+
+  if (!slash) return null;
+
+  return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`;
+}
+
+function inferSkillsFromText(text) {
+  const lower = normalizeAscii(text).toLowerCase();
+  const mappings = [
+    ['ventas', ['Ventas', 'Servicio al cliente']],
+    ['cliente', ['Atencion al cliente', 'Comunicacion']],
+    ['cajero', ['Caja', 'Atencion al cliente']],
+    ['bodega', ['Inventario', 'Bodega']],
+    ['almacen', ['Inventario', 'Bodega']],
+    ['motorista', ['Licencia de conducir', 'Logistica']],
+    ['repartidor', ['Logistica', 'Distribucion']],
+    ['contabilidad', ['Contabilidad']],
+    ['contador', ['Contabilidad']],
+    ['administrativo', ['Administracion']],
+    ['recursos humanos', ['Recursos humanos']],
+    ['excel', ['Excel', 'Ofimatica']],
+    ['office', ['Ofimatica']],
+    ['software', ['Software', 'Tecnologia']],
+    ['programacion', ['Programacion', 'Logica']],
+    ['sistemas', ['Sistemas', 'Tecnologia']],
+    ['soporte tecnico', ['Soporte tecnico']],
+    ['datos', ['Analisis de datos']],
+    ['inteligencia artificial', ['Inteligencia artificial']],
+    ['call center', ['Call center', 'Atencion al cliente']],
+    ['ingles', ['Ingles']],
+    ['marketing', ['Marketing digital']],
+    ['gastronomia', ['Gastronomia']],
+    ['turismo', ['Turismo']],
+    ['emprendimiento', ['Emprendimiento']],
+  ];
+  const skills = [];
+
+  for (const [keyword, mappedSkills] of mappings) {
+    if (lower.includes(normalizeAscii(keyword).toLowerCase())) {
+      skills.push(...mappedSkills);
+    }
+  }
+
+  return uniqueCleanTexts(skills).slice(0, 14);
+}
+
+function inferTargetRolesFromSkills(skills) {
+  const roles = [];
+
+  if (skills.includes('Atencion al cliente') || skills.includes('Servicio al cliente')) {
+    roles.push('Asesor de servicio', 'Auxiliar de tienda');
+  }
+
+  if (skills.includes('Ventas')) roles.push('Vendedor', 'Ejecutivo comercial');
+  if (skills.includes('Programacion')) roles.push('Desarrollador junior');
+  if (skills.includes('Ofimatica') || skills.includes('Excel')) roles.push('Auxiliar administrativo');
+  if (skills.includes('Gastronomia')) roles.push('Auxiliar de cocina');
+  if (skills.includes('Turismo')) roles.push('Atencion turistica');
+
+  return uniqueCleanTexts(roles).slice(0, 8);
+}
+
+function inferModalityFromText(text) {
+  const lower = normalizeAscii(text).toLowerCase();
+
+  if (lower.includes('remoto') || lower.includes('remote')) return 'remoto';
+  if (lower.includes('hibrido') || lower.includes('hybrid')) return 'hibrido';
+  if (lower.includes('presencial')) return 'presencial';
+
+  return '';
+}
+
+function inferEmploymentTypeFromText(text) {
+  const lower = normalizeAscii(text).toLowerCase();
+
+  if (lower.includes('medio tiempo') || lower.includes('part time')) return 'medio tiempo';
+  if (lower.includes('temporal')) return 'temporal';
+  if (lower.includes('pasantia') || lower.includes('practica')) return 'pasantia';
+  if (lower.includes('tiempo completo') || lower.includes('full time')) return 'tiempo completo';
+
+  return '';
+}
+
+function isUsefulJobTitle(title) {
+  const lower = normalizeAscii(title).toLowerCase();
+  const generic = [
+    'bolsa de trabajo',
+    'portal de empleo',
+    'buscar empleo',
+    'consejos para encontrar empleo',
+    'salarios',
+    'evaluaciones de empresa',
+  ];
+
+  return cleanText(title).length >= 4 && !generic.some((fragment) => lower.includes(fragment));
+}
+
+function buildJobCandidate(saved, job) {
+  return {
+    id: saved.id,
+    source: job.source,
+    external_id: job.external_id,
+    provider: job.provider,
+    title: job.title,
+    company: job.company,
+    area: job.area,
+    description: limitChars(job.description, 1200),
+    employment_type: job.employment_type,
+    modality: job.modality,
+    country: job.country,
+    department: job.department,
+    municipality: job.municipality,
+    location_text: job.location_text,
+    salary_min: job.salary_min,
+    salary_max: job.salary_max,
+    currency: job.currency,
+    schedule: job.schedule,
+    posted_at: job.posted_at,
+    expires_at: job.expires_at,
+    experience_level: job.experience_level,
+    education_level: job.education_level,
+    requirements: job.requirements,
+    skills: job.skills,
+    benefits: job.benefits,
+    source_url: job.source_url,
+    apply_url: job.apply_url,
+  };
+}
+
+function buildCourseCandidate(saved, course) {
+  return {
+    id: saved.id,
+    source: course.source,
+    external_id: course.external_id,
+    provider: course.provider,
+    title: course.title,
+    area: course.area,
+    description: limitChars(course.description, 1000),
+    modality: course.modality,
+    country: course.country,
+    department: course.department,
+    municipality: course.municipality,
+    is_free: course.is_free,
+    cost: course.cost,
+    currency: course.currency,
+    duration_hours: course.duration_hours,
+    schedule: course.schedule,
+    start_date: course.start_date,
+    end_date: course.end_date,
+    level: course.level,
+    requirements: course.requirements,
+    skills: course.skills,
+    target_roles: course.target_roles,
+    certificate: course.certificate,
+    source_url: course.source_url,
+  };
+}
+
+function preRankRecommendationCandidates(candidates, profileSnapshot) {
+  return {
+    jobs: candidates.jobs
+      .map((candidate) => ({
+        ...candidate,
+        pre_score: scoreRecommendationCandidate(candidate, profileSnapshot, 'job'),
+      }))
+      .sort((left, right) => right.pre_score - left.pre_score)
+      .slice(0, recommendationPreRankLimit),
+    courses: candidates.courses
+      .map((candidate) => ({
+        ...candidate,
+        pre_score: scoreRecommendationCandidate(candidate, profileSnapshot, 'course'),
+      }))
+      .sort((left, right) => right.pre_score - left.pre_score)
+      .slice(0, recommendationPreRankLimit),
+  };
+}
+
+function scoreRecommendationCandidate(candidate, profileSnapshot, type) {
+  const candidateText = normalizeAscii(buildCandidateText(candidate)).toLowerCase();
+  const desiredRoles = profileSnapshot.desired_roles;
+  const desiredAreas = profileSnapshot.desired_areas;
+  const skills = uniqueCleanTexts([
+    ...profileSnapshot.skills.technical,
+    ...profileSnapshot.skills.tools,
+    ...profileSnapshot.skills.soft,
+  ]);
+  let score = 0;
+
+  score += countTermMatches(candidateText, desiredRoles) * 18;
+  score += countTermMatches(candidateText, desiredAreas) * 12;
+  score += Math.min(countTermMatches(candidateText, skills) * 8, 40);
+
+  if (
+    profileSnapshot.location.department &&
+    normalizeAscii(candidate.department || candidate.location_text || '').toLowerCase().includes(
+      normalizeAscii(profileSnapshot.location.department).toLowerCase(),
+    )
+  ) {
+    score += 10;
+  }
+
+  if (type === 'course' && candidate.is_free === true) score += 5;
+  if (type === 'job' && candidate.source_url) score += 5;
+
+  return score;
+}
+
+function buildCandidateText(candidate) {
+  return [
+    candidate.title,
+    candidate.company,
+    candidate.provider,
+    candidate.area,
+    candidate.description,
+    candidate.modality,
+    candidate.location_text,
+    candidate.department,
+    candidate.municipality,
+    ...(candidate.skills || []),
+    ...(candidate.requirements || []),
+    ...(candidate.target_roles || []),
+  ]
+    .map(cleanText)
+    .filter(Boolean)
+    .join(' ');
+}
+
+function countTermMatches(text, terms) {
+  return uniqueCleanTexts(terms).filter((term) => text.includes(normalizeAscii(term).toLowerCase())).length;
+}
+
+async function buildOpenAiRecommendationMatch({ profileSnapshot, candidates, maxResults, model }) {
+  const response = await fetchWithTimeout(
+    'https://api.openai.com/v1/responses',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getOpenAiApiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: 'system',
+            content:
+              'Eres el motor de matching de TrabajoYA para El Salvador. Rankea cursos y empleos usando solo los candidatos provistos. No inventes IDs, empresas, cursos, empleos ni enlaces. Responde en espanol claro y accionable.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              profile: profileSnapshot,
+              candidates: getCandidatesForModel(candidates),
+              max_results: maxResults,
+              rules: [
+                'Selecciona maximo max_results empleos y maximo max_results cursos.',
+                'Usa solo job_id y course_id existentes en candidates.',
+                'Prioriza coincidencia de rol, habilidades, ubicacion, disponibilidad y brechas de aprendizaje.',
+                'Si un candidato es debil, explica concerns brevemente en vez de ocultarlo.',
+              ],
+            }),
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'trabajoya_recommendation_match',
+            strict: true,
+            schema: getRecommendationMatchSchema(),
+          },
+        },
+        max_output_tokens: 4500,
+      }),
+    },
+    openAiMatchTimeoutMs,
+    'openai_request_timeout',
+  );
+
+  if (!response.ok) {
+    const error = new Error('openai_request_failed');
+    error.details = limitChars(await response.text(), 500);
+    throw error;
+  }
+
+  const data = await response.json();
+  const outputText = extractOpenAiOutputText(data);
+  let parsed;
+
+  try {
+    parsed = JSON.parse(outputText);
+  } catch {
+    throw new Error('openai_invalid_json');
+  }
+
+  return validateAndReconcileRecommendationResult(parsed, candidates, maxResults);
+}
+
+function getCandidatesForModel(candidates) {
+  return {
+    jobs: candidates.jobs.map((job) => ({
+      job_id: job.id,
+      title: job.title,
+      company: job.company || '',
+      provider: job.provider,
+      area: job.area || '',
+      description: limitChars(job.description, 700),
+      location: job.location_text || [job.municipality, job.department].filter(Boolean).join(', '),
+      modality: job.modality || '',
+      employment_type: job.employment_type || '',
+      schedule: job.schedule || '',
+      salary_min: job.salary_min,
+      salary_max: job.salary_max,
+      skills: job.skills || [],
+      requirements: job.requirements || [],
+      source_url: job.source_url || '',
+      pre_score: job.pre_score || 0,
+    })),
+    courses: candidates.courses.map((course) => ({
+      course_id: course.id,
+      title: course.title,
+      provider: course.provider,
+      area: course.area || '',
+      description: limitChars(course.description, 650),
+      modality: course.modality || '',
+      is_free: course.is_free,
+      cost: course.cost,
+      duration_hours: course.duration_hours,
+      skills: course.skills || [],
+      target_roles: course.target_roles || [],
+      source_url: course.source_url || '',
+      pre_score: course.pre_score || 0,
+    })),
+  };
+}
+
+function getRecommendationMatchSchema() {
+  const stringArray = {
+    type: 'array',
+    items: {
+      type: 'string',
+    },
+  };
+
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['summary', 'recommendations', 'profile_gaps'],
+    properties: {
+      summary: {
+        type: 'string',
+      },
+      recommendations: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['jobs', 'courses'],
+        properties: {
+          jobs: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['job_id', 'title', 'company', 'source_url', 'score', 'fit_level', 'reasons', 'concerns', 'next_step'],
+              properties: {
+                job_id: { type: 'string' },
+                title: { type: 'string' },
+                company: { type: 'string' },
+                source_url: { type: 'string' },
+                score: { type: 'number' },
+                fit_level: { type: 'string', enum: ['alto', 'medio', 'bajo'] },
+                reasons: stringArray,
+                concerns: stringArray,
+                next_step: { type: 'string' },
+              },
+            },
+          },
+          courses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['course_id', 'title', 'provider', 'source_url', 'score', 'reasons', 'skill_gaps_addressed', 'next_step'],
+              properties: {
+                course_id: { type: 'string' },
+                title: { type: 'string' },
+                provider: { type: 'string' },
+                source_url: { type: 'string' },
+                score: { type: 'number' },
+                reasons: stringArray,
+                skill_gaps_addressed: stringArray,
+                next_step: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      profile_gaps: stringArray,
+    },
+  };
+}
+
+function extractOpenAiOutputText(data) {
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  if (data.output_parsed && typeof data.output_parsed === 'object') {
+    return JSON.stringify(data.output_parsed);
+  }
+
+  const texts = [];
+
+  for (const output of data.output || []) {
+    for (const content of output.content || []) {
+      if (content.type === 'refusal' || content.refusal) {
+        throw new Error('openai_refusal');
+      }
+
+      if (typeof content.text === 'string') {
+        texts.push(content.text);
+      }
+    }
+  }
+
+  const text = texts.join('\n').trim();
+
+  if (!text) {
+    throw new Error('openai_empty_response');
+  }
+
+  return text;
+}
+
+function validateAndReconcileRecommendationResult(result, candidates, maxResults) {
+  const fallback = buildFallbackRecommendationResult(candidates, maxResults);
+  const jobMap = new Map(candidates.jobs.map((job) => [job.id, job]));
+  const courseMap = new Map(candidates.courses.map((course) => [course.id, course]));
+  const rawJobs = Array.isArray(result?.recommendations?.jobs) ? result.recommendations.jobs : [];
+  const rawCourses = Array.isArray(result?.recommendations?.courses) ? result.recommendations.courses : [];
+  const jobs = rawJobs
+    .map((item) => {
+      const candidate = jobMap.get(cleanText(item.job_id));
+      if (!candidate) return null;
+
+      return {
+        job_id: candidate.id,
+        title: candidate.title,
+        company: candidate.company || '',
+        source_url: candidate.source_url || '',
+        score: normalizeRecommendationScore(item.score, candidate.pre_score),
+        fit_level: ['alto', 'medio', 'bajo'].includes(cleanText(item.fit_level)) ? cleanText(item.fit_level) : fitLevelFromScore(item.score),
+        reasons: normalizeTextArray(item.reasons).slice(0, 4),
+        concerns: normalizeTextArray(item.concerns).slice(0, 3),
+        next_step: cleanText(item.next_step) || 'Revisar requisitos y aplicar desde la fuente original.',
+      };
+    })
+    .filter(Boolean)
+    .slice(0, maxResults);
+  const courses = rawCourses
+    .map((item) => {
+      const candidate = courseMap.get(cleanText(item.course_id));
+      if (!candidate) return null;
+
+      return {
+        course_id: candidate.id,
+        title: candidate.title,
+        provider: candidate.provider || '',
+        source_url: candidate.source_url || '',
+        score: normalizeRecommendationScore(item.score, candidate.pre_score),
+        reasons: normalizeTextArray(item.reasons).slice(0, 4),
+        skill_gaps_addressed: normalizeTextArray(item.skill_gaps_addressed).slice(0, 5),
+        next_step: cleanText(item.next_step) || 'Revisar el temario y guardar el curso como siguiente paso.',
+      };
+    })
+    .filter(Boolean)
+    .slice(0, maxResults);
+
+  return {
+    summary:
+      cleanText(result?.summary) ||
+      'Estas recomendaciones se generaron cruzando el perfil con oportunidades encontradas en vivo.',
+    recommendations: {
+      jobs: jobs.length > 0 ? jobs : fallback.recommendations.jobs,
+      courses: courses.length > 0 ? courses : fallback.recommendations.courses,
+    },
+    profile_gaps: normalizeTextArray(result?.profile_gaps).slice(0, 8),
+  };
+}
+
+function buildEmptyRecommendationResult() {
+  return {
+    summary: 'No se encontraron oportunidades suficientes en la busqueda en vivo para generar recomendaciones.',
+    recommendations: {
+      jobs: [],
+      courses: [],
+    },
+    profile_gaps: ['Probar con mas informacion del perfil o ampliar fuentes de busqueda.'],
+  };
+}
+
+function buildFallbackRecommendationResult(candidates, maxResults) {
+  return {
+    summary: 'Estas recomendaciones se basan en coincidencias directas entre el perfil y los resultados encontrados.',
+    recommendations: {
+      jobs: candidates.jobs.slice(0, maxResults).map(buildFallbackJobRecommendation),
+      courses: candidates.courses.slice(0, maxResults).map(buildFallbackCourseRecommendation),
+    },
+    profile_gaps: [],
+  };
+}
+
+function buildFallbackJobRecommendation(candidate) {
+  const score = normalizeRecommendationScore(undefined, candidate.pre_score);
+
+  return {
+    job_id: candidate.id,
+    title: candidate.title,
+    company: candidate.company || '',
+    source_url: candidate.source_url || '',
+    score,
+    fit_level: fitLevelFromScore(score),
+    reasons: buildCandidateReasons(candidate, 'job'),
+    concerns: candidate.department || candidate.location_text ? [] : ['La ubicacion no esta completamente clara en la fuente.'],
+    next_step: 'Revisar requisitos y aplicar desde la fuente original.',
+  };
+}
+
+function buildFallbackCourseRecommendation(candidate) {
+  const score = normalizeRecommendationScore(undefined, candidate.pre_score);
+
+  return {
+    course_id: candidate.id,
+    title: candidate.title,
+    provider: candidate.provider || '',
+    source_url: candidate.source_url || '',
+    score,
+    reasons: buildCandidateReasons(candidate, 'course'),
+    skill_gaps_addressed: normalizeTextArray(candidate.skills).slice(0, 5),
+    next_step: 'Revisar el temario y guardar el curso como siguiente paso.',
+  };
+}
+
+function buildCandidateReasons(candidate, type) {
+  const reasons = [];
+
+  if (candidate.area) reasons.push(`Coincide con el area ${candidate.area}.`);
+  if (candidate.skills?.length) reasons.push(`Refuerza habilidades como ${candidate.skills.slice(0, 3).join(', ')}.`);
+  if (type === 'job' && (candidate.department || candidate.location_text)) {
+    reasons.push(`La ubicacion reportada es ${candidate.location_text || candidate.department}.`);
+  }
+  if (type === 'course' && candidate.modality) reasons.push(`Modalidad ${candidate.modality}.`);
+
+  return reasons.slice(0, 4);
+}
+
+function normalizeRecommendationScore(value, fallback) {
+  const number = Number(value);
+  const base = Number.isFinite(number) ? number : 55 + Number(fallback || 0);
+
+  return clampNumber(base, 0, 100);
+}
+
+function fitLevelFromScore(score) {
+  const number = Number(score);
+
+  if (number >= 80) return 'alto';
+  if (number >= 60) return 'medio';
+
+  return 'bajo';
+}
+
+async function fetchWithTimeout(url, options, timeoutMs, timeoutErrorMessage) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(timeoutErrorMessage);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function getRecommendationErrorStatus(error) {
+  if (['missing_openai_api_key', 'missing_exa_api_key'].includes(error?.message)) return 503;
+
+  if (
+    [
+      'exa_request_failed',
+      'exa_request_timeout',
+      'openai_request_failed',
+      'openai_request_timeout',
+      'openai_empty_response',
+      'openai_invalid_json',
+      'openai_refusal',
+    ].includes(error?.message)
+  ) {
+    return 502;
+  }
+
+  if (error?.message === 'invalid_uuid') return 400;
+  if (error?.message === 'missing_db_password') return 503;
+
+  return 400;
 }
 
 function getCoursePayloads(body) {
@@ -1146,6 +2594,18 @@ function getDatasetApiKey() {
   );
 }
 
+function getExaApiKey() {
+  return cleanText(process.env.EXA_API_KEY);
+}
+
+function getOpenAiApiKey() {
+  return cleanText(process.env.OPENAI_API_KEY);
+}
+
+function getOpenAiMatchModel() {
+  return cleanText(process.env.OPENAI_MATCH_MODEL) || 'gpt-5.4-mini';
+}
+
 function setAdminSessionCookie(response) {
   const token = createAdminSessionToken();
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
@@ -1281,6 +2741,46 @@ function getPublicError(error) {
     return 'Cada curso necesita titulo.';
   }
 
+  if (error?.message === 'missing_job_title') {
+    return 'Cada vacante necesita titulo.';
+  }
+
+  if (error?.message === 'missing_exa_api_key') {
+    return 'Configura EXA_API_KEY en Dokploy para buscar oportunidades en vivo.';
+  }
+
+  if (error?.message === 'missing_openai_api_key') {
+    return 'Configura OPENAI_API_KEY en Dokploy para generar el match del perfil.';
+  }
+
+  if (error?.message === 'exa_request_failed') {
+    return 'Exa no pudo completar la busqueda en vivo.';
+  }
+
+  if (error?.message === 'exa_request_timeout') {
+    return 'Exa tardo demasiado en responder.';
+  }
+
+  if (error?.message === 'openai_request_failed') {
+    return 'OpenAI no pudo generar el match del perfil.';
+  }
+
+  if (error?.message === 'openai_request_timeout') {
+    return 'OpenAI tardo demasiado en responder.';
+  }
+
+  if (error?.message === 'openai_invalid_json' || error?.message === 'openai_empty_response') {
+    return 'OpenAI respondio sin el formato esperado.';
+  }
+
+  if (error?.message === 'openai_refusal') {
+    return 'OpenAI rechazo generar recomendaciones para esta solicitud.';
+  }
+
+  if (error?.message === 'invalid_uuid') {
+    return 'ID invalido.';
+  }
+
   return error?.message || 'No se pudo conectar a Postgres.';
 }
 
@@ -1324,6 +2824,16 @@ function normalizeCode(value) {
 function normalizeOptionalCode(value) {
   if (!value) return '';
   return normalizeCode(value);
+}
+
+function normalizeUuid(value) {
+  const id = cleanText(value).toLowerCase();
+
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) {
+    throw new Error('invalid_uuid');
+  }
+
+  return id;
 }
 
 function normalizePhoneSV(value) {
@@ -1370,6 +2880,31 @@ function normalizeTextArray(value) {
   }
 
   return normalized.slice(0, 50);
+}
+
+function uniqueCleanTexts(values) {
+  const seen = new Set();
+  const normalized = [];
+
+  for (const value of values || []) {
+    const text = cleanText(value);
+    const key = normalizeAscii(text).toLowerCase();
+
+    if (!text || seen.has(key)) continue;
+
+    seen.add(key);
+    normalized.push(text);
+  }
+
+  return normalized;
+}
+
+function normalizeAscii(value) {
+  return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function escapeRegExp(value) {
+  return cleanText(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function sanitizePostgresText(value) {

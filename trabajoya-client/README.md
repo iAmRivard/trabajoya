@@ -53,6 +53,10 @@ POST /api/intakes/:code/verify
 POST /api/candidate-profiles
 POST /api/datasets/courses/upsert
 POST /api/datasets/jobs/upsert
+POST /api/intakes/:code/recommendations
+GET  /api/intakes/:code/recommendations/latest
+POST /api/profiles/:profileId/recommendations
+GET  /api/profiles/:profileId/recommendations
 GET  /api/courses
 GET  /api/jobs
 GET  /api/intakes
@@ -94,6 +98,75 @@ inicial, el `intake_code` y el `cv_text` guardado para que retome ese contexto.
 
 `POST /api/intakes/:code/verify` queda por compatibilidad con versiones
 anteriores del flujo.
+
+## Recomendaciones por perfil
+
+El endpoint de recomendaciones busca oportunidades en vivo con Exa, guarda los
+resultados encontrados en Postgres y usa OpenAI para rankear solo esos cursos y
+empleos reales contra el perfil confirmado.
+
+Para candidato por codigo:
+
+```http
+POST /api/intakes/:code/recommendations
+Content-Type: application/json
+```
+
+Body opcional:
+
+```json
+{
+  "max_results": 5
+}
+```
+
+Respuesta resumida:
+
+```json
+{
+  "ok": true,
+  "run_id": "uuid",
+  "source": "live",
+  "cached": false,
+  "summary": "Resumen del match",
+  "recommendations": {
+    "jobs": [],
+    "courses": []
+  },
+  "profile_gaps": [],
+  "search": {
+    "live_counts": {
+      "jobs": 12,
+      "courses": 10
+    }
+  }
+}
+```
+
+Si el mismo perfil pide recomendaciones dentro de
+`MATCH_MIN_INTERVAL_SECONDS`, se devuelve la ultima corrida con `cached: true`
+para evitar gasto accidental. Tambien se puede leer la ultima recomendacion con:
+
+```http
+GET /api/intakes/:code/recommendations/latest
+```
+
+Endpoints admin, requieren login del panel:
+
+```http
+POST /api/profiles/:profileId/recommendations
+GET  /api/profiles/:profileId/recommendations
+```
+
+Variables requeridas:
+
+```text
+EXA_API_KEY=...
+OPENAI_API_KEY=...
+OPENAI_MATCH_MODEL=gpt-5.4-mini
+MATCH_MIN_INTERVAL_SECONDS=60
+MATCH_MAX_RESULTS_PER_TYPE=5
+```
 
 ## Datasets de cursos
 
@@ -196,7 +269,7 @@ El deploy fullstack usa:
 ```text
 Dockerfile
 docker-compose.dokploy.yml
-migrations/001_candidate_intakes.sql
+migrations/
 ```
 
 Desde GitHub, Dokploy puede usar el `docker-compose.yml` que esta en la raiz
@@ -209,6 +282,8 @@ TRABAJOYA_DB_PASSWORD=...
 TRABAJOYA_ADMIN_PASSWORD=...
 TRABAJOYA_SESSION_SECRET=...
 TRABAJOYA_INTAKE_API_KEY=...
+EXA_API_KEY=...
+OPENAI_API_KEY=...
 ```
 
 El script `npm run migrate` aplica todos los archivos `.sql` en

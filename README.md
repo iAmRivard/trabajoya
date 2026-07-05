@@ -21,6 +21,8 @@ docker-compose.yml       Compose para deploy en Dokploy desde GitHub
 5. El agente recibe el contexto del registro y el CV previo, si existe.
 6. El tool de ElevenLabs guarda el perfil final en Postgres y lo enlaza al
    registro inicial.
+7. Con el perfil confirmado, el backend puede buscar cursos y empleos en vivo
+   con Exa y usar OpenAI para rankear recomendaciones reales.
 
 ## Desarrollo local
 
@@ -48,6 +50,8 @@ TRABAJOYA_DB_PASSWORD=...
 TRABAJOYA_ADMIN_PASSWORD=...
 TRABAJOYA_SESSION_SECRET=...
 TRABAJOYA_INTAKE_API_KEY=...
+EXA_API_KEY=...
+OPENAI_API_KEY=...
 ```
 
 El compose espera que existan estas redes externas en el VPS:
@@ -67,10 +71,10 @@ cd trabajoya-client
 npm run migrate
 ```
 
-La migracion principal esta en:
+Las migraciones estan en:
 
 ```text
-trabajoya-client/migrations/001_candidate_intakes.sql
+trabajoya-client/migrations/
 ```
 
 ## Seguridad
@@ -90,6 +94,40 @@ Content-Type: application/json
 
 Los endpoints de consulta `GET /api/intakes` y `GET /api/profiles` requieren
 sesion admin desde el panel web.
+
+## API Recomendaciones
+
+Para generar recomendaciones desde el enlace del candidato:
+
+```http
+POST /api/intakes/:code/recommendations
+Content-Type: application/json
+```
+
+Body opcional:
+
+```json
+{
+  "max_results": 5
+}
+```
+
+Para consultar la ultima recomendacion guardada:
+
+```http
+GET /api/intakes/:code/recommendations/latest
+```
+
+Desde admin:
+
+```http
+POST /api/profiles/:profileId/recommendations
+GET  /api/profiles/:profileId/recommendations
+```
+
+El endpoint guarda historial en `public.candidate_recommendation_runs`. Si se
+repite una solicitud dentro de `MATCH_MIN_INTERVAL_SECONDS`, devuelve la ultima
+corrida con `cached: true`.
 
 ## Insomnia
 

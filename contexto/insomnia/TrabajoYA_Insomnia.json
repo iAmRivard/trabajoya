@@ -26,6 +26,7 @@
         "intake_api_key": "PEGAR_API_KEY_WHATSAPP",
         "dataset_api_key": "PEGAR_API_KEY_DATASETS_O_USAR_LA_MISMA",
         "intake_code": "PEGAR_CODIGO_GENERADO",
+        "profile_id": "PEGAR_PROFILE_ID_ADMIN",
         "candidate_phone": "77778888"
       },
       "dataPropertyOrder": {
@@ -35,6 +36,7 @@
           "intake_api_key",
           "dataset_api_key",
           "intake_code",
+          "profile_id",
           "candidate_phone"
         ]
       },
@@ -98,6 +100,18 @@
       "environment": {},
       "environmentPropertyOrder": null,
       "metaSortKey": -700,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_recommendations",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Recomendaciones",
+      "description": "Matching en vivo con Exa + OpenAI usando el perfil confirmado.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -675,
       "_type": "request_group"
     },
     {
@@ -372,6 +386,104 @@
       ],
       "authentication": {},
       "metaSortKey": -690,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_recommendations_candidate_create",
+      "parentId": "fld_recommendations",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/recommendations",
+      "name": "Generar recomendaciones por codigo",
+      "description": "Busca cursos/empleos en vivo con Exa y usa OpenAI para hacer match contra el perfil confirmado del codigo.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"max_results\": 5\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -675,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_recommendations_candidate_latest",
+      "parentId": "fld_recommendations",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/recommendations/latest",
+      "name": "Ultima recomendacion por codigo",
+      "description": "Devuelve la ultima corrida exitosa guardada para el codigo.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -674,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_recommendations_admin_create",
+      "parentId": "fld_recommendations",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/profiles/{{ _.profile_id }}/recommendations",
+      "name": "Generar recomendaciones admin",
+      "description": "Requiere login admin previo. Usar profile_id de GET /api/profiles.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"max_results\": 5\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -673,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_recommendations_admin_list",
+      "parentId": "fld_recommendations",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/profiles/{{ _.profile_id }}/recommendations",
+      "name": "Listar recomendaciones admin",
+      "description": "Requiere login admin previo. Lista el historial reciente del perfil.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "10",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -672,
       "isPrivate": false,
       "settingStoreCookies": true,
       "settingSendCookies": true,
