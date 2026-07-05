@@ -6,7 +6,69 @@
     <title>TrabajoYA</title>
   </head>
   <body>
-    <main class="app-shell">
+    <section id="landingPage" class="landing-page" aria-label="Inicio TrabajoYA" hidden>
+      <header class="landing-nav">
+        <div class="identity">
+          <div class="mark" aria-hidden="true">
+            <span class="mark-line"></span>
+            <span class="mark-dot"></span>
+          </div>
+          <div>
+            <p class="eyebrow">Asesor laboral de voz</p>
+            <h1>TrabajoYA</h1>
+          </div>
+        </div>
+        <a class="landing-admin-link" href="/admin">
+          <i data-lucide="shield-check"></i>
+          <span>Panel</span>
+        </a>
+      </header>
+
+      <div class="landing-hero">
+        <div class="landing-copy">
+          <p class="eyebrow">Perfil laboral desde WhatsApp</p>
+          <h2>Empieza por WhatsApp y completa tu perfil con voz.</h2>
+          <p>
+            TrabajoYA guía al candidato, guarda su perfil y le muestra empleos, cursos y una práctica corta de entrevista.
+          </p>
+          <div class="landing-actions">
+            <a id="landingWhatsappLink" class="primary-action" href="#" target="_blank" rel="noreferrer">
+              <i data-lucide="message-circle"></i>
+              <span>Escribir por WhatsApp</span>
+            </a>
+            <a class="landing-secondary-link" href="/admin">
+              <i data-lucide="user-plus"></i>
+              <span>Crear enlace manual</span>
+            </a>
+          </div>
+          <p class="landing-footnote">
+            Abre el chat o escanea el QR para iniciar el flujo desde el teléfono.
+          </p>
+        </div>
+
+        <div class="landing-qr-panel" aria-label="QR para WhatsApp">
+          <div class="landing-qr-heading">
+            <i data-lucide="qr-code"></i>
+            <div>
+              <p class="eyebrow">Acceso rápido</p>
+              <h3>Escanea para WhatsApp</h3>
+            </div>
+          </div>
+          <img id="landingQrImage" class="landing-qr-image" alt="QR para abrir WhatsApp de TrabajoYA" />
+          <p id="landingWhatsappCopy" class="landing-whatsapp-copy">Preparando enlace.</p>
+        </div>
+      </div>
+
+      <div class="landing-signal" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </section>
+
+    <main id="appShell" class="app-shell">
       <section class="workspace" aria-label="TrabajoYA">
         <div class="identity">
           <div class="mark" aria-hidden="true">

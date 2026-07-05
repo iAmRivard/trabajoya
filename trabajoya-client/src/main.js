@@ -13,10 +13,12 @@ import {
   Link,
   LogIn,
   LogOut,
+  MessageCircle,
   MessageSquare,
   Mic,
   MicOff,
   Play,
+  QrCode,
   Radio,
   RefreshCw,
   Send,
@@ -30,8 +32,16 @@ import './styles.css';
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_3101kwq6aq0yfywbc4jyxqevv9zm';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const LANDING_WHATSAPP_NUMBER = import.meta.env.VITE_TRABAJOYA_WHATSAPP_NUMBER || '50373707733';
+const LANDING_WHATSAPP_MESSAGE =
+  import.meta.env.VITE_TRABAJOYA_WHATSAPP_MESSAGE || 'Hola TrabajoYA, quiero iniciar mi perfil laboral.';
 
 const elements = {
+  appShell: document.querySelector('#appShell'),
+  landingPage: document.querySelector('#landingPage'),
+  landingWhatsappLink: document.querySelector('#landingWhatsappLink'),
+  landingQrImage: document.querySelector('#landingQrImage'),
+  landingWhatsappCopy: document.querySelector('#landingWhatsappCopy'),
   startButton: document.querySelector('#startButton'),
   stopButton: document.querySelector('#stopButton'),
   muteButton: document.querySelector('#muteButton'),
@@ -248,6 +258,50 @@ function describeMicrophoneCheck(check) {
   return 'Micrófono listo con reducción de ruido.';
 }
 
+function normalizeWhatsAppNumber(value) {
+  return String(value || '').replace(/[^\d]/g, '');
+}
+
+function buildLandingWhatsappUrl() {
+  const phone = normalizeWhatsAppNumber(LANDING_WHATSAPP_NUMBER);
+  if (!phone) return '';
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(LANDING_WHATSAPP_MESSAGE)}`;
+}
+
+function initializeLandingRoute() {
+  const isLandingRoute = window.location.pathname === '/' || window.location.pathname === '/inicio';
+
+  if (!isLandingRoute) {
+    elements.landingPage.hidden = true;
+    elements.appShell.hidden = false;
+    return false;
+  }
+
+  const whatsappUrl = buildLandingWhatsappUrl();
+  const phone = normalizeWhatsAppNumber(LANDING_WHATSAPP_NUMBER);
+
+  document.body.classList.add('landing-mode');
+  elements.landingPage.hidden = false;
+  elements.appShell.hidden = true;
+
+  if (!whatsappUrl) {
+    elements.landingWhatsappLink.removeAttribute('href');
+    elements.landingWhatsappLink.setAttribute('aria-disabled', 'true');
+    elements.landingQrImage.hidden = true;
+    elements.landingWhatsappCopy.textContent = 'Configura VITE_TRABAJOYA_WHATSAPP_NUMBER para activar el enlace.';
+    return true;
+  }
+
+  elements.landingWhatsappLink.href = whatsappUrl;
+  elements.landingQrImage.src =
+    `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(whatsappUrl)}`;
+  elements.landingQrImage.hidden = false;
+  elements.landingWhatsappCopy.textContent = `WhatsApp +${phone}. Mensaje inicial listo.`;
+
+  return true;
+}
+
 createIcons({
   icons: {
     ArrowLeft,
@@ -262,10 +316,12 @@ createIcons({
     Link,
     LogIn,
     LogOut,
+    MessageCircle,
     MessageSquare,
     Mic,
     MicOff,
     Play,
+    QrCode,
     Radio,
     RefreshCw,
     Send,
@@ -2300,8 +2356,12 @@ elements.muteInterviewButton.addEventListener('click', toggleMute);
 elements.retryInterviewButton.addEventListener('click', retryInterviewPractice);
 elements.backToRecommendationsButton.addEventListener('click', backToRecommendationsFromInterview);
 
-setRecommendationsTab('jobs');
-setConnectedState(false);
-initializeCandidateRoute();
-addEvent('system', `Agente listo: ${AGENT_ID}`);
-checkAdminSession();
+const landingActive = initializeLandingRoute();
+
+if (!landingActive) {
+  setRecommendationsTab('jobs');
+  setConnectedState(false);
+  initializeCandidateRoute();
+  addEvent('system', `Agente listo: ${AGENT_ID}`);
+  checkAdminSession();
+}

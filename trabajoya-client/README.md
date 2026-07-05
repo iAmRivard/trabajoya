@@ -403,7 +403,13 @@ TRABAJOYA_SESSION_SECRET=...
 TRABAJOYA_INTAKE_API_KEY=...
 EXA_API_KEY=...
 OPENAI_API_KEY=...
+VITE_TRABAJOYA_WHATSAPP_NUMBER=50370000000
+VITE_TRABAJOYA_WHATSAPP_MESSAGE=Hola TrabajoYA, quiero iniciar mi perfil laboral.
 ```
+
+El dominio base `/` muestra la landing con QR/link a WhatsApp. El panel
+operativo queda disponible en `/admin`, y los enlaces de candidato siguen en
+`/c/CODIGO`.
 
 El script `npm run migrate` aplica todos los archivos `.sql` en
 `migrations/` en orden alfabetico. En produccion, aplicarlo con un usuario de

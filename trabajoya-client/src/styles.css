@@ -59,10 +59,234 @@ button:disabled {
 
 button svg,
 .status-item svg,
-.panel-header svg {
+.panel-header svg,
+.landing-page svg {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
+}
+
+.landing-page {
+  min-height: 100vh;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 22px;
+  overflow: hidden;
+  padding: clamp(18px, 4vw, 42px);
+  color: #13251b;
+  background:
+    linear-gradient(125deg, rgba(244, 245, 241, 0.92), rgba(244, 245, 241, 0.72) 52%, rgba(241, 217, 106, 0.24)),
+    repeating-linear-gradient(135deg, rgba(20, 62, 42, 0.08) 0 1px, transparent 1px 18px),
+    #f4f5f1;
+}
+
+.landing-page::after {
+  content: "";
+  position: absolute;
+  inset: auto -8% -16% 42%;
+  height: 42vh;
+  background:
+    linear-gradient(90deg, rgba(20, 62, 42, 0.12), rgba(46, 125, 96, 0.08)),
+    repeating-linear-gradient(90deg, transparent 0 22px, rgba(232, 95, 68, 0.16) 22px 26px);
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+.landing-nav,
+.landing-hero,
+.landing-signal {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.landing-nav .identity h1 {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+}
+
+.landing-admin-link,
+.landing-actions a {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #c9d2ca;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #1a251f;
+  background: rgba(255, 255, 255, 0.78);
+  text-decoration: none;
+  font-weight: 800;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.landing-admin-link:hover,
+.landing-actions a:hover {
+  border-color: #779382;
+  transform: translateY(-1px);
+}
+
+.landing-hero {
+  width: min(1120px, 100%);
+  min-height: 68vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: clamp(28px, 6vw, 72px);
+  align-items: center;
+  justify-self: center;
+}
+
+.landing-copy {
+  max-width: 660px;
+}
+
+.landing-copy h2 {
+  max-width: 10ch;
+  margin: 0 0 18px;
+  font-size: clamp(3rem, 8.8vw, 6.8rem);
+  line-height: 0.9;
+  letter-spacing: 0;
+}
+
+.landing-copy > p:not(.eyebrow):not(.landing-footnote) {
+  max-width: 58ch;
+  margin-bottom: 26px;
+  color: #39483f;
+  font-size: clamp(1.02rem, 2vw, 1.22rem);
+  line-height: 1.58;
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.landing-actions .primary-action {
+  min-height: 54px;
+  border-color: #143e2a;
+  color: #ffffff;
+  background: #143e2a;
+  box-shadow: 0 12px 28px rgba(20, 62, 42, 0.24);
+}
+
+.landing-actions .primary-action:hover {
+  border-color: #205c40;
+  background: #205c40;
+}
+
+.landing-actions a[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.54;
+}
+
+.landing-secondary-link {
+  min-height: 54px;
+}
+
+.landing-footnote {
+  margin: 14px 0 0;
+  color: #66746b;
+  font-size: 0.94rem;
+}
+
+.landing-qr-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(201, 210, 202, 0.94);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 22px 60px rgba(32, 42, 35, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.landing-qr-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-qr-heading > svg {
+  width: 32px;
+  height: 32px;
+  color: #143e2a;
+}
+
+.landing-qr-heading h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+.landing-qr-image {
+  width: min(100%, 280px);
+  aspect-ratio: 1;
+  justify-self: center;
+  border: 1px solid #e0e6df;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.landing-whatsapp-copy {
+  margin: 0;
+  color: #59685f;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.landing-signal {
+  width: min(460px, 100%);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(28px, 1fr));
+  gap: 10px;
+  align-items: end;
+  justify-self: center;
+  opacity: 0.86;
+}
+
+.landing-signal span {
+  height: 42px;
+  border-radius: 999px 999px 8px 8px;
+  background: #143e2a;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.landing-signal span:nth-child(2) {
+  height: 76px;
+  background: #2e7d60;
+  animation-delay: 140ms;
+}
+
+.landing-signal span:nth-child(3) {
+  height: 116px;
+  background: #e85f44;
+  animation-delay: 280ms;
+}
+
+.landing-signal span:nth-child(4) {
+  height: 68px;
+  background: #f1d96a;
+  animation-delay: 420ms;
+}
+
+.landing-signal span:nth-child(5) {
+  height: 52px;
+  background: #4f6f9f;
+  animation-delay: 560ms;
 }
 
 .app-shell {
@@ -1734,6 +1958,32 @@ body.voice-starting.candidate-mode .candidate-bottom-action button i {
 }
 
 @media (max-width: 900px) {
+  .landing-page {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .landing-nav {
+    align-items: flex-start;
+  }
+
+  .landing-hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 28px 0 0;
+  }
+
+  .landing-copy h2 {
+    max-width: 11ch;
+    font-size: clamp(2.6rem, 13vw, 5.4rem);
+  }
+
+  .landing-qr-panel {
+    width: min(100%, 380px);
+    justify-self: start;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
     align-items: start;
@@ -1769,6 +2019,53 @@ body.voice-starting.candidate-mode .candidate-bottom-action button i {
 }
 
 @media (max-width: 620px) {
+  .landing-nav {
+    flex-direction: column;
+  }
+
+  .landing-admin-link,
+  .landing-actions,
+  .landing-actions a {
+    width: 100%;
+  }
+
+  .landing-actions {
+    display: grid;
+  }
+
+  .landing-copy > p:not(.eyebrow):not(.landing-footnote) {
+    margin-bottom: 20px;
+  }
+
+  .landing-qr-panel {
+    justify-self: stretch;
+  }
+
+  .landing-signal {
+    grid-template-columns: repeat(5, minmax(20px, 1fr));
+    gap: 7px;
+  }
+
+  .landing-signal span {
+    height: 30px;
+  }
+
+  .landing-signal span:nth-child(2) {
+    height: 50px;
+  }
+
+  .landing-signal span:nth-child(3) {
+    height: 76px;
+  }
+
+  .landing-signal span:nth-child(4) {
+    height: 46px;
+  }
+
+  .landing-signal span:nth-child(5) {
+    height: 36px;
+  }
+
   .app-shell {
     width: min(100% - 20px, 1180px);
     padding: 10px 0;

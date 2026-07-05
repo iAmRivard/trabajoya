@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_TRABAJOYA_WHATSAPP_NUMBER: ${VITE_TRABAJOYA_WHATSAPP_NUMBER:-}
+        VITE_TRABAJOYA_WHATSAPP_MESSAGE: ${VITE_TRABAJOYA_WHATSAPP_MESSAGE:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
