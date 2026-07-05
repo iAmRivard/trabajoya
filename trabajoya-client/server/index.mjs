@@ -745,7 +745,7 @@ function normalizeCoursePayload(course, fallbackSource = '') {
     certificate: parseOptionalBoolean(course.certificate ?? course.has_certificate ?? course.hasCertificate) ?? null,
     source_url: sourceUrl,
     status: normalizeCourseStatus(course.status),
-    raw: course,
+    raw: sanitizeForPostgresJson(course),
   };
 }
 
@@ -783,7 +783,7 @@ async function upsertCourse(db, course) {
     course.certificate,
     course.source_url,
     course.status,
-    JSON.stringify(course.raw),
+    stringifyPostgresJson(course.raw),
     contentHash,
   ];
   const result = await db.query(
@@ -910,7 +910,7 @@ function normalizeJobPayload(job, fallbackSource = '') {
     source_url: sourceUrl,
     apply_url: applyUrl,
     status: normalizeJobStatus(job.status),
-    raw: job,
+    raw: sanitizeForPostgresJson(job),
   };
 }
 
@@ -951,7 +951,7 @@ async function upsertJobVacancy(db, job) {
     job.source_url,
     job.apply_url,
     job.status,
-    JSON.stringify(job.raw),
+    stringifyPostgresJson(job.raw),
     contentHash,
   ];
   const result = await db.query(
@@ -1048,7 +1048,7 @@ async function recordDatasetSyncRun(db, { dataset, source, itemsSeen, itemsUpser
       source,
       itemsSeen,
       itemsUpserted,
-      JSON.stringify(metadata || {}),
+      stringifyPostgresJson(metadata || {}),
     ],
   );
 }
@@ -1339,7 +1339,7 @@ function normalizePhoneSV(value) {
 
 function cleanText(value) {
   if (value === null || value === undefined) return '';
-  return String(value).trim();
+  return sanitizePostgresText(String(value)).trim();
 }
 
 function limitChars(text, maxLength) {
@@ -1370,6 +1370,35 @@ function normalizeTextArray(value) {
   }
 
   return normalized.slice(0, 50);
+}
+
+function sanitizePostgresText(value) {
+  return String(value).replace(/\u0000/g, '');
+}
+
+function sanitizeForPostgresJson(value, seen = new WeakSet()) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') return sanitizePostgresText(value);
+  if (typeof value !== 'object') return value;
+
+  if (seen.has(value)) return null;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForPostgresJson(item, seen));
+  }
+
+  const sanitized = {};
+
+  for (const [key, childValue] of Object.entries(value)) {
+    sanitized[sanitizePostgresText(key)] = sanitizeForPostgresJson(childValue, seen);
+  }
+
+  return sanitized;
+}
+
+function stringifyPostgresJson(value) {
+  return JSON.stringify(sanitizeForPostgresJson(value));
 }
 
 function parseOptionalNumber(value) {
