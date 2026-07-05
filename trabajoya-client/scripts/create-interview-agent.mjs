@@ -117,10 +117,7 @@ function buildConversationConfig(config) {
   delete prompt.toolIds;
   delete prompt.tools_ids;
   prompt.tools = [saveInterviewFeedbackTool()];
-  prompt.built_in_tools = {
-    ...(prompt.built_in_tools || {}),
-    end_call: {},
-  };
+  prompt.built_in_tools ||= {};
   nextConfig.agent.prompt = prompt;
 
   return nextConfig;
