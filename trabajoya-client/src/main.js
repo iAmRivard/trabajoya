@@ -1,9 +1,14 @@
 import { Conversation } from '@elevenlabs/client';
 import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Briefcase,
   createIcons,
   CheckCircle,
   Copy,
   Database,
+  ExternalLink,
   FileText,
   Link,
   LogIn,
@@ -35,6 +40,17 @@ const elements = {
   candidateGateDetail: document.querySelector('#candidateGateDetail'),
   candidateSteps: document.querySelector('#candidateSteps'),
   candidateVerifyStatus: document.querySelector('#candidateVerifyStatus'),
+  continueRecommendationsButton: document.querySelector('#continueRecommendationsButton'),
+  recommendationsPanel: document.querySelector('#recommendationsPanel'),
+  recommendationsSummary: document.querySelector('#recommendationsSummary'),
+  recommendationsStatus: document.querySelector('#recommendationsStatus'),
+  recommendationsLoading: document.querySelector('#recommendationsLoading'),
+  recommendationsMeta: document.querySelector('#recommendationsMeta'),
+  recommendationsJobs: document.querySelector('#recommendationsJobs'),
+  recommendationsCourses: document.querySelector('#recommendationsCourses'),
+  recommendationsGaps: document.querySelector('#recommendationsGaps'),
+  refreshRecommendationsButton: document.querySelector('#refreshRecommendationsButton'),
+  backToProfileButton: document.querySelector('#backToProfileButton'),
   cvForm: document.querySelector('#cvForm'),
   cvInput: document.querySelector('#cvInput'),
   extractCvButton: document.querySelector('#extractCvButton'),
@@ -93,6 +109,8 @@ let candidateCloseAfterSave = false;
 let candidateSaveCompletedAt = 0;
 let candidateFinalAgentMessageAt = 0;
 let candidateAgentSpeaking = false;
+let candidateRecommendations = null;
+let recommendationsLoading = false;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -101,9 +119,14 @@ function getErrorMessage(error, fallback) {
 
 createIcons({
   icons: {
+    ArrowLeft,
+    ArrowRight,
+    BookOpen,
+    Briefcase,
     CheckCircle,
     Copy,
     Database,
+    ExternalLink,
     FileText,
     Link,
     LogIn,
@@ -165,6 +188,8 @@ function setConnectedState(isConnected) {
     muted = false;
     updateMuteButton();
   }
+
+  updateCandidateRecommendationsButton();
 }
 
 function canStartConversation() {
@@ -205,10 +230,46 @@ function setCandidateVerifyStatus(text, kind = 'neutral') {
   elements.candidateVerifyStatus.dataset.kind = kind;
 }
 
+function isCandidateProfileCompleted() {
+  return Boolean(candidateSession?.intake?.status === 'profile_completed' || candidateSession?.intake?.profile_id);
+}
+
+function updateCandidateRecommendationsButton() {
+  if (!candidateSession || !elements.continueRecommendationsButton) return;
+
+  const canContinue = isCandidateProfileCompleted() && !conversation && !recommendationsLoading;
+  elements.continueRecommendationsButton.hidden = !isCandidateProfileCompleted();
+  elements.continueRecommendationsButton.disabled = !canContinue;
+  elements.continueRecommendationsButton.innerHTML = recommendationsLoading
+    ? '<i data-lucide="refresh-cw"></i><span>Buscando</span>'
+    : '<i data-lucide="arrow-right"></i><span>Continuar</span>';
+  createIcons({ icons: { ArrowRight, RefreshCw } });
+}
+
+function setCandidateRecommendationsView(active) {
+  if (!candidateSession) return;
+
+  document.body.classList.toggle('recommendations-mode', active);
+  elements.recommendationsPanel.hidden = !active;
+  elements.continueRecommendationsButton.hidden = active || !isCandidateProfileCompleted();
+  elements.panelTitle.textContent = active ? 'Recomendaciones' : 'Progreso';
+
+  if (active) {
+    setCandidateFlow('recommendations');
+    elements.sessionTitle.textContent = 'Recomendaciones';
+    elements.sessionDetail.textContent = 'Cursos y empleos alineados a tu perfil.';
+    return;
+  }
+
+  setCandidateFlow(isCandidateProfileCompleted() ? 'saved' : 'context');
+  updateCandidateSessionCopy();
+  updateCandidateRecommendationsButton();
+}
+
 function setCandidateFlow(stage) {
   if (!elements.candidateSteps) return;
 
-  const order = ['link', 'context', 'conversation', 'saved'];
+  const order = ['link', 'context', 'conversation', 'saved', 'recommendations'];
   const activeIndex = order.indexOf(stage);
 
   for (const item of elements.candidateSteps.querySelectorAll('[data-stage]')) {
@@ -276,6 +337,7 @@ async function loadCandidateIntake() {
 
     updateCandidateSessionCopy();
     setConnectedState(false);
+    updateCandidateRecommendationsButton();
     addEvent('system', `Registro cargado: ${candidateSession.code}`);
   } catch (error) {
     candidateSession.intake = null;
@@ -670,6 +732,227 @@ async function fetchProfiles() {
   }
 }
 
+function setRecommendationsStatus(text, kind = 'neutral') {
+  elements.recommendationsStatus.textContent = text;
+  elements.recommendationsStatus.dataset.kind = kind;
+}
+
+function setRecommendationsLoading(isLoading) {
+  recommendationsLoading = isLoading;
+  elements.recommendationsLoading.hidden = !isLoading;
+  elements.refreshRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted();
+  elements.continueRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted();
+  updateCandidateRecommendationsButton();
+}
+
+async function openCandidateRecommendations() {
+  if (!candidateSession?.intake) return;
+
+  setCandidateRecommendationsView(true);
+
+  if (candidateRecommendations) {
+    renderCandidateRecommendations(candidateRecommendations);
+    return;
+  }
+
+  await fetchCandidateRecommendations();
+}
+
+function closeCandidateRecommendations() {
+  setCandidateRecommendationsView(false);
+}
+
+async function fetchCandidateRecommendations() {
+  if (!candidateSession?.intake || !isCandidateProfileCompleted()) {
+    setRecommendationsStatus('El perfil debe estar guardado antes de buscar recomendaciones.', 'error');
+    return;
+  }
+
+  setRecommendationsLoading(true);
+  setRecommendationsStatus('Buscando oportunidades en vivo. Esto puede tardar un poco.');
+  elements.recommendationsSummary.textContent = 'Estamos comparando tu perfil con cursos y empleos disponibles.';
+  elements.recommendationsMeta.hidden = true;
+  elements.recommendationsJobs.replaceChildren();
+  elements.recommendationsCourses.replaceChildren();
+  elements.recommendationsGaps.replaceChildren();
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}/recommendations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        max_results: 5,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudieron generar recomendaciones.');
+    }
+
+    candidateRecommendations = data;
+    renderCandidateRecommendations(data);
+    addEvent('system', data.cached ? 'Recomendaciones cargadas desde historial.' : 'Recomendaciones generadas.');
+  } catch (error) {
+    candidateRecommendations = null;
+    setRecommendationsStatus(getErrorMessage(error, 'No se pudieron generar recomendaciones.'), 'error');
+    elements.recommendationsSummary.textContent = 'No pudimos completar la búsqueda. Puedes intentar de nuevo.';
+    addEvent('error', getErrorMessage(error, 'No se pudieron generar recomendaciones.'));
+  } finally {
+    setRecommendationsLoading(false);
+  }
+}
+
+function renderCandidateRecommendations(data) {
+  const jobs = data.recommendations?.jobs || [];
+  const courses = data.recommendations?.courses || [];
+  const gaps = data.profile_gaps || [];
+
+  elements.recommendationsSummary.textContent =
+    data.summary || 'Estas opciones se generaron a partir de tu perfil laboral.';
+  setRecommendationsStatus(data.cached ? 'Mostrando la recomendación guardada más reciente.' : 'Recomendaciones listas.');
+  renderRecommendationsMeta(data);
+  renderRecommendationCards(elements.recommendationsJobs, jobs, 'job');
+  renderRecommendationCards(elements.recommendationsCourses, courses, 'course');
+  renderRecommendationGaps(gaps);
+  createIcons({ icons: { ExternalLink, Briefcase, BookOpen, ArrowLeft, RefreshCw } });
+}
+
+function renderRecommendationsMeta(data) {
+  const metaItems = [
+    data.generated_at ? `Generado: ${formatDate(data.generated_at)}` : '',
+    data.cached ? 'Desde historial' : 'Búsqueda nueva',
+    data.search?.live_counts
+      ? `${data.search.live_counts.jobs || 0} empleos y ${data.search.live_counts.courses || 0} cursos encontrados`
+      : '',
+  ].filter(Boolean);
+
+  elements.recommendationsMeta.hidden = metaItems.length === 0;
+  elements.recommendationsMeta.replaceChildren(
+    ...metaItems.map((item) => {
+      const span = document.createElement('span');
+      span.textContent = item;
+      return span;
+    }),
+  );
+}
+
+function renderRecommendationCards(container, items, type) {
+  container.replaceChildren();
+
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-recommendations';
+    empty.textContent =
+      type === 'job'
+        ? 'No encontramos empleos suficientemente alineados por ahora.'
+        : 'No encontramos cursos suficientemente alineados por ahora.';
+    container.append(empty);
+    return;
+  }
+
+  for (const item of items) {
+    container.append(createRecommendationCard(item, type));
+  }
+}
+
+function createRecommendationCard(item, type) {
+  const article = document.createElement('article');
+  const header = document.createElement('div');
+  const title = document.createElement('h4');
+  const score = document.createElement('span');
+  const meta = document.createElement('p');
+  const reasons = createRecommendationList('Por qué encaja', item.reasons);
+  const secondary =
+    type === 'job'
+      ? createRecommendationList('A considerar', item.concerns)
+      : createRecommendationList('Refuerza', item.skill_gaps_addressed);
+  const nextStep = document.createElement('p');
+  const link = document.createElement('a');
+  const scoreValue = Number(item.score || 0);
+
+  article.className = 'recommendation-card';
+  header.className = 'recommendation-card-header';
+  title.textContent = item.title || (type === 'job' ? 'Empleo recomendado' : 'Curso recomendado');
+  score.className = `score-pill ${getScoreClass(scoreValue)}`;
+  score.textContent = `${Math.round(scoreValue)}%`;
+  header.append(title, score);
+
+  meta.className = 'recommendation-card-meta';
+  meta.textContent =
+    type === 'job'
+      ? [item.company, item.fit_level ? `Ajuste ${item.fit_level}` : ''].filter(Boolean).join(' | ') || 'Vacante'
+      : item.provider || 'Curso';
+
+  nextStep.className = 'next-step';
+  nextStep.textContent = item.next_step || 'Revisar la fuente original.';
+
+  link.className = 'source-link';
+  link.href = item.source_url || '#';
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.innerHTML = '<i data-lucide="external-link"></i><span>Ver fuente</span>';
+  if (!item.source_url) {
+    link.removeAttribute('href');
+    link.setAttribute('aria-disabled', 'true');
+  }
+
+  article.append(header, meta, reasons, secondary, nextStep, link);
+  return article;
+}
+
+function createRecommendationList(label, values) {
+  const wrapper = document.createElement('div');
+  const title = document.createElement('strong');
+  const list = document.createElement('ul');
+  const normalized = Array.isArray(values) ? values.filter(Boolean).slice(0, 4) : [];
+
+  wrapper.className = 'recommendation-points';
+  title.textContent = label;
+
+  if (normalized.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Sin observaciones.';
+    wrapper.append(title, empty);
+    return wrapper;
+  }
+
+  for (const value of normalized) {
+    const item = document.createElement('li');
+    item.textContent = value;
+    list.append(item);
+  }
+
+  wrapper.append(title, list);
+  return wrapper;
+}
+
+function renderRecommendationGaps(gaps) {
+  elements.recommendationsGaps.replaceChildren();
+
+  if (!gaps.length) {
+    const item = document.createElement('span');
+    item.textContent = 'Perfil suficientemente claro para recomendar.';
+    elements.recommendationsGaps.append(item);
+    return;
+  }
+
+  for (const gap of gaps.slice(0, 8)) {
+    const item = document.createElement('span');
+    item.textContent = gap;
+    elements.recommendationsGaps.append(item);
+  }
+}
+
+function getScoreClass(score) {
+  if (score >= 80) return 'is-high';
+  if (score >= 60) return 'is-mid';
+
+  return 'is-low';
+}
+
 function limitAgentContextText(text, maxLength = 2200) {
   const value = String(text || '').trim();
 
@@ -754,6 +1037,7 @@ function isProfileSaveToolResponse(toolResponse) {
 function requestCandidateConversationEnd() {
   if (!candidateSession?.intake || candidateCloseAfterSave) return;
 
+  candidateSession.intake.status = 'profile_completed';
   sendPostSaveClosureInstruction();
   candidateCloseAfterSave = true;
   candidateSaveCompletedAt = Date.now();
@@ -762,6 +1046,7 @@ function requestCandidateConversationEnd() {
   setCandidateVerifyStatus('Perfil guardado. Esperando despedida del agente...');
   elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará cuando el agente termine de hablar.';
   addEvent('system', 'Perfil guardado; esperaré a que el agente termine de hablar.');
+  updateCandidateRecommendationsButton();
   scheduleCandidateAutoEndCheck(22000);
 }
 
@@ -802,7 +1087,8 @@ async function evaluateCandidateConversationEnd() {
     await stopConversation();
     setCandidateVerifyStatus('Perfil guardado. Conversación finalizada.');
     elements.sessionTitle.textContent = 'Perfil completado';
-    elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente.';
+    elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente. Puedes continuar.';
+    updateCandidateRecommendationsButton();
     return;
   }
 
@@ -1021,6 +1307,9 @@ elements.profilesTab.addEventListener('click', () => setPanel('profiles'));
 elements.refreshProfilesButton.addEventListener('click', fetchProfiles);
 elements.intakeForm.addEventListener('submit', createIntake);
 elements.copyIntakeUrlButton.addEventListener('click', copyIntakeUrl);
+elements.continueRecommendationsButton.addEventListener('click', openCandidateRecommendations);
+elements.refreshRecommendationsButton.addEventListener('click', fetchCandidateRecommendations);
+elements.backToProfileButton.addEventListener('click', closeCandidateRecommendations);
 
 setConnectedState(false);
 initializeCandidateRoute();

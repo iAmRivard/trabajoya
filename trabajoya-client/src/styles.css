@@ -213,15 +213,27 @@ h1 {
   background: #ffffff;
 }
 
-.verify-status {
+.candidate-status-row {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.verify-status {
+  margin: 0;
   font-size: 0.9rem;
+}
+
+.candidate-status-row button {
+  flex: 0 0 auto;
 }
 
 .candidate-flow {
   counter-reset: profile-step;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -286,6 +298,13 @@ body.candidate-mode #refreshProfilesButton {
 
 body.candidate-mode .side-panel {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+body.recommendations-mode .voice-surface,
+body.recommendations-mode .cv-panel,
+body.recommendations-mode .controls,
+body.recommendations-mode .text-composer {
+  display: none;
 }
 
 .voice-surface {
@@ -438,6 +457,266 @@ body.candidate-mode .side-panel {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.recommendations-panel {
+  display: grid;
+  gap: 18px;
+  border-block: 1px solid #e2e5de;
+  padding: 20px 0;
+}
+
+.recommendations-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.recommendations-header h2 {
+  margin-bottom: 8px;
+  font-size: 1.7rem;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.recommendations-header p {
+  margin-bottom: 0;
+  color: #59685f;
+  line-height: 1.5;
+}
+
+.recommendations-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.recommendations-loading {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d8e1d8;
+  border-radius: 8px;
+  padding: 12px;
+  color: #264536;
+  background: #f7fbf7;
+}
+
+.recommendations-loading span {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 3px solid #c6d9cb;
+  border-top-color: #143e2a;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.recommendations-loading p,
+.recommendations-status {
+  margin: 0;
+}
+
+.recommendations-status {
+  min-height: 22px;
+  color: #59685f;
+  font-size: 0.92rem;
+}
+
+.recommendations-status[data-kind="error"] {
+  color: #b93525;
+}
+
+.recommendations-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recommendations-meta span,
+.gap-list span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dce4dc;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #34443a;
+  background: #ffffff;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.recommendation-column {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.recommendation-column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recommendation-column-title h3,
+.profile-gaps h3 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.recommendation-column-title svg {
+  width: 18px;
+  height: 18px;
+  color: #143e2a;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recommendation-card {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.recommendation-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.recommendation-card h4 {
+  margin: 0;
+  color: #17201b;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.score-pill {
+  min-width: 48px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #ffffff;
+  background: #66746b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.score-pill.is-high {
+  background: #176243;
+}
+
+.score-pill.is-mid {
+  background: #8a6b18;
+}
+
+.score-pill.is-low {
+  background: #9b3d30;
+}
+
+.recommendation-card-meta,
+.next-step,
+.empty-recommendations {
+  margin: 0;
+  color: #59685f;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.next-step {
+  color: #24382f;
+}
+
+.recommendation-points {
+  display: grid;
+  gap: 6px;
+}
+
+.recommendation-points strong {
+  color: #34443a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.recommendation-points ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: #34443a;
+  font-size: 0.86rem;
+  line-height: 1.38;
+}
+
+.recommendation-points p {
+  margin: 0;
+  color: #66746b;
+  font-size: 0.86rem;
+}
+
+.source-link {
+  min-height: 38px;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #c9d2ca;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #143e2a;
+  background: #f9faf7;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.source-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.source-link[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.profile-gaps {
+  display: grid;
+  gap: 10px;
+}
+
+.gap-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .primary-action {
@@ -728,7 +1007,16 @@ body.candidate-mode .side-panel {
   }
 
   .candidate-flow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .recommendations-header,
+  .recommendations-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendations-actions {
+    justify-content: flex-start;
   }
 }
 
@@ -761,11 +1049,20 @@ body.candidate-mode .side-panel {
     grid-template-columns: 1fr;
   }
 
+  .candidate-status-row,
+  .recommendations-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .controls button,
   .cv-row button,
   .verify-form button,
   .intake-result button,
-  .input-row button {
+  .input-row button,
+  .candidate-status-row button,
+  .recommendations-actions button,
+  .source-link {
     width: 100%;
   }
 

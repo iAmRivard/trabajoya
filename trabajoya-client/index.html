@@ -45,8 +45,15 @@
             <li data-stage="context">Contexto</li>
             <li data-stage="conversation">Entrevista</li>
             <li data-stage="saved">Guardado</li>
+            <li data-stage="recommendations">Opciones</li>
           </ol>
-          <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
+          <div class="candidate-status-row">
+            <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
+            <button id="continueRecommendationsButton" class="primary-action" type="button" hidden>
+              <i data-lucide="arrow-right"></i>
+              <span>Continuar</span>
+            </button>
+          </div>
         </section>
 
         <div class="voice-surface">
@@ -82,6 +89,57 @@
             <p id="cvStatus">Sin CV</p>
             <pre id="cvPreview" hidden></pre>
           </div>
+        </section>
+
+        <section id="recommendationsPanel" class="recommendations-panel" aria-label="Recomendaciones" hidden>
+          <div class="recommendations-header">
+            <div>
+              <p class="eyebrow">Siguientes pasos</p>
+              <h2>Recomendaciones para tu perfil</h2>
+              <p id="recommendationsSummary">Buscaremos cursos y empleos alineados a tu perfil laboral.</p>
+            </div>
+            <div class="recommendations-actions">
+              <button id="backToProfileButton" type="button">
+                <i data-lucide="arrow-left"></i>
+                <span>Perfil</span>
+              </button>
+              <button id="refreshRecommendationsButton" class="primary-action" type="button">
+                <i data-lucide="refresh-cw"></i>
+                <span>Actualizar</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="recommendationsLoading" class="recommendations-loading" hidden>
+            <span></span>
+            <p>Buscando oportunidades y comparándolas con tu perfil.</p>
+          </div>
+
+          <p id="recommendationsStatus" class="recommendations-status">Sin cargar</p>
+          <div id="recommendationsMeta" class="recommendations-meta" hidden></div>
+
+          <div class="recommendations-grid">
+            <section class="recommendation-column" aria-labelledby="jobsTitle">
+              <div class="recommendation-column-title">
+                <i data-lucide="briefcase"></i>
+                <h3 id="jobsTitle">Empleos</h3>
+              </div>
+              <div id="recommendationsJobs" class="recommendation-list"></div>
+            </section>
+
+            <section class="recommendation-column" aria-labelledby="coursesTitle">
+              <div class="recommendation-column-title">
+                <i data-lucide="book-open"></i>
+                <h3 id="coursesTitle">Cursos</h3>
+              </div>
+              <div id="recommendationsCourses" class="recommendation-list"></div>
+            </section>
+          </div>
+
+          <section class="profile-gaps" aria-labelledby="profileGapsTitle">
+            <h3 id="profileGapsTitle">Para fortalecer tu perfil</h3>
+            <div id="recommendationsGaps" class="gap-list"></div>
+          </section>
         </section>
 
         <div class="controls" aria-label="Controles de conversación">
