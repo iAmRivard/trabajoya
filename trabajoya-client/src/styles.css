@@ -1106,6 +1106,24 @@ body.candidate-mode .source-link {
   font-size: 0.92rem;
 }
 
+.interview-status[data-kind="loading"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #264536;
+}
+
+.interview-status[data-kind="loading"]::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid #c6d9cb;
+  border-top-color: #143e2a;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
 .interview-status[data-kind="error"] {
   color: #b93525;
 }
@@ -1638,4 +1656,11 @@ body.candidate-mode .candidate-bottom-action button {
     display: grid;
     grid-template-columns: 1fr;
   }
+}
+
+body.candidate-mode.recommendations-mode .controls,
+body.candidate-mode.interview-mode .controls,
+body.candidate-mode[data-candidate-view="feedback"] .controls,
+body.candidate-mode .interview-controls {
+  display: none;
 }

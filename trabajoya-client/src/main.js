@@ -140,6 +140,7 @@ let recommendationsTab = 'jobs';
 let conversationMode = null;
 let activeInterview = null;
 let interviewLoading = false;
+let interviewStarting = false;
 let interviewFeedbackTimer = null;
 let interviewAutoEndTimer = null;
 let interviewCloseAfterFeedback = false;
@@ -443,6 +444,17 @@ function updateCandidatePrimaryAction() {
   }
 
   if (candidateView === 'interview' || isInterviewView) {
+    if (interviewStarting) {
+      setCandidatePrimaryConfig({
+        action: null,
+        label: 'Conectando',
+        icon: 'refresh-cw',
+        disabled: true,
+        hint: 'Activando micrófono y conectando con el entrevistador.',
+      });
+      return;
+    }
+
     setCandidatePrimaryConfig({
       action: activeInterview ? 'start-interview' : 'back-recommendations',
       label: interviewLoading ? 'Preparando' : activeInterview ? 'Iniciar práctica' : 'Ver opciones',
@@ -1358,6 +1370,7 @@ function clearInterviewPanel() {
   clearInterviewFeedbackTimer();
   activeInterview = null;
   interviewLoading = false;
+  interviewStarting = false;
   document.body.classList.remove('interview-mode');
   elements.interviewPanel.hidden = true;
   elements.interviewTitle.textContent = 'Simulacion de entrevista';
@@ -1406,7 +1419,7 @@ async function openInterviewPractice(job) {
   elements.interviewTitle.textContent = 'Preparando práctica';
   elements.interviewDetail.textContent = 'Creando una sesión corta con la vacante seleccionada.';
   elements.interviewJobSummary.replaceChildren();
-  setInterviewStatus('Creando sesión de entrevista...');
+  setInterviewStatus('Creando sesión de entrevista...', 'loading');
   updateInterviewControls();
   scrollCandidateElementIntoView(elements.interviewPanel);
 
@@ -1515,14 +1528,17 @@ async function startInterviewConversation() {
 
   try {
     conversationMode = 'interview';
+    interviewStarting = true;
     elements.connectionStatus.textContent = 'Conectando';
     elements.startInterviewButton.disabled = true;
-    setInterviewStatus('Solicitando acceso al micrófono...');
+    setInterviewStatus('Solicitando acceso al micrófono...', 'loading');
+    updateInterviewControls();
+    updateCandidatePrimaryAction();
     addEvent('system', 'Solicitando acceso al micrófono para práctica.');
 
     const microphoneCheck = await prepareVoiceMicrophone();
     const microphoneMessage = describeMicrophoneCheck(microphoneCheck);
-    setInterviewStatus(microphoneMessage);
+    setInterviewStatus(`${microphoneMessage} Conectando con el entrevistador...`, 'loading');
     addEvent('system', microphoneMessage);
 
     const sessionOptions = {
@@ -1532,8 +1548,11 @@ async function startInterviewConversation() {
       dynamicVariables: buildInterviewDynamicVariables(),
       onConversationCreated: (createdConversation) => {
         conversation = createdConversation;
+        setInterviewStatus('Conexión creada. Esperando al entrevistador...', 'loading');
+        updateCandidatePrimaryAction();
       },
       onConnect: ({ conversationId }) => {
+        interviewStarting = false;
         setConnectedState(true);
         setInterviewStatus('Entrevista en curso. Responde como si fuera con el empleador.');
         activeInterview.conversationId = conversationId;
@@ -1542,6 +1561,7 @@ async function startInterviewConversation() {
       },
       onDisconnect: (details) => {
         clearInterviewAutoEndTimer();
+        interviewStarting = false;
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1552,6 +1572,7 @@ async function startInterviewConversation() {
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de entrevista.');
         clearInterviewAutoEndTimer();
+        interviewStarting = false;
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1590,6 +1611,7 @@ async function startInterviewConversation() {
   } catch (error) {
     conversation = null;
     conversationMode = null;
+    interviewStarting = false;
     setConnectedState(false);
     setInterviewStatus(getErrorMessage(error, 'No se pudo iniciar la práctica.'), 'error');
     addEvent('error', getErrorMessage(error, 'No se pudo iniciar la práctica.'));
