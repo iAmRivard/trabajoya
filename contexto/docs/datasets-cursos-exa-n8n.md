@@ -17,9 +17,11 @@ n8n Manual/Cron -> HTTP Exa /search -> Code normalize -> HTTP TrabajoYA API -> P
 INCAF
 https://www.incaf.gob.sv/listado-formacion-disponible/
 
-Platzi / Gobierno de El Salvador
-https://diaspora.certificate.gob.sv/
-https://platzi.com/blog/el-salvador/
+Platzi catalogo general
+https://platzi.com/cursos/
+
+El workflow consulta Platzi por varias areas: programacion, datos/IA,
+marketing/negocios, ingles/habilidades profesionales y herramientas de oficina.
 ```
 
 ## Configuracion rapida en n8n
@@ -121,7 +123,7 @@ Con sesion admin:
 ```http
 GET /api/courses?limit=50
 GET /api/courses?source=incaf
-GET /api/courses?source=platzi_gob_sv
+GET /api/courses?source=platzi
 ```
 
 ## Siguiente mejora
