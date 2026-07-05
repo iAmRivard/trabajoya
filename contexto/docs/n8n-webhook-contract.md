@@ -137,7 +137,8 @@ Payload esperado desde ElevenLabs:
 Workflow:
 
 1. Webhook recibe el payload.
-2. Code node valida `X-Trabajoya-Key` y `interview_session_id`.
+2. Code node valida `X-Trabajoya-Key` o `trabajoya_key` en query string, y
+   `interview_session_id`.
 3. HTTP Request llama `POST /api/interview-feedback` en TrabajoYA con la misma
    key.
 4. El backend actualiza `public.candidate_interview_simulations`.

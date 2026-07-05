@@ -137,7 +137,7 @@ function saveInterviewFeedbackTool() {
     execution_mode: 'immediate',
     pre_tool_speech: 'off',
     api_schema: {
-      url: feedbackWebhookUrl,
+      url: buildFeedbackWebhookUrl(),
       method: 'POST',
       request_headers: {
         'Content-Type': 'application/json',
@@ -221,6 +221,16 @@ function saveInterviewFeedbackTool() {
       response_filter: null,
     },
   };
+}
+
+function buildFeedbackWebhookUrl() {
+  const url = new URL(feedbackWebhookUrl);
+
+  if (!url.searchParams.has('trabajoya_key')) {
+    url.searchParams.set('trabajoya_key', feedbackApiKey);
+  }
+
+  return url.toString();
 }
 
 function schemaField(schema) {
