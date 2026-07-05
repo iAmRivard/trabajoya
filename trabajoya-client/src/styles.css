@@ -519,6 +519,10 @@ body.candidate-mode[data-candidate-view="saved"] .text-composer {
   display: none;
 }
 
+body.candidate-mode.has-initial-cv .cv-panel {
+  display: none;
+}
+
 body.recommendations-mode .voice-surface,
 body.recommendations-mode .cv-panel,
 body.recommendations-mode .controls,

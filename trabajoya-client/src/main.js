@@ -335,8 +335,15 @@ function setCandidateView(view) {
 
   candidateView = view;
   document.body.dataset.candidateView = view;
+  updateCandidateBodyFlags();
   updateCandidateHeader();
   updateCandidatePrimaryAction();
+}
+
+function updateCandidateBodyFlags() {
+  if (!candidateSession) return;
+
+  document.body.classList.toggle('has-initial-cv', Boolean(candidateSession.intake?.initial_data?.cv_text));
 }
 
 function updateCandidateHeader() {
@@ -496,7 +503,7 @@ function updateCandidatePrimaryAction() {
     icon: 'play',
     disabled: !canStartConversation() || anyConversation || Boolean(activeInterview),
     hint: candidateSession.intake?.initial_data?.cv_text
-      ? 'Ya tenemos tu contexto inicial y CV.'
+      ? 'Ya tenemos tu CV y contexto inicial.'
       : 'Puedes subir tu CV antes de iniciar si lo tienes.',
   });
 }
@@ -697,6 +704,7 @@ async function loadCandidateIntake() {
 
     candidateSession.intake = data.intake;
     candidateSession.contextSent = false;
+    updateCandidateBodyFlags();
     setCandidateFlow(data.intake.status === 'profile_completed' ? 'saved' : 'context');
     setCandidateView(data.intake.status === 'profile_completed' ? 'saved' : 'profile');
     setCandidateVerifyStatus(
