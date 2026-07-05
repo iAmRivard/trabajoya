@@ -437,6 +437,39 @@ body.candidate-mode .status-item:nth-child(3) {
   display: none;
 }
 
+body.candidate-mode.recommendations-mode .candidate-gate,
+body.candidate-mode.interview-mode .candidate-gate,
+body.candidate-mode[data-candidate-view="feedback"] .candidate-gate,
+body.candidate-mode.recommendations-mode .status-strip,
+body.candidate-mode.interview-mode .status-strip,
+body.candidate-mode[data-candidate-view="feedback"] .status-strip {
+  display: none;
+}
+
+body.candidate-mode.recommendations-mode .workspace,
+body.candidate-mode.interview-mode .workspace,
+body.candidate-mode[data-candidate-view="feedback"] .workspace {
+  gap: 10px;
+}
+
+body.candidate-mode.recommendations-mode .candidate-header,
+body.candidate-mode.interview-mode .candidate-header,
+body.candidate-mode[data-candidate-view="feedback"] .candidate-header {
+  padding: 9px 11px;
+}
+
+body.candidate-mode.recommendations-mode .candidate-header .eyebrow,
+body.candidate-mode.interview-mode .candidate-header .eyebrow,
+body.candidate-mode[data-candidate-view="feedback"] .candidate-header .eyebrow {
+  display: none;
+}
+
+body.candidate-mode.recommendations-mode .candidate-header h2,
+body.candidate-mode.interview-mode .candidate-header h2,
+body.candidate-mode[data-candidate-view="feedback"] .candidate-header h2 {
+  font-size: 0.98rem;
+}
+
 body.candidate-mode[data-candidate-view="loading"] .voice-surface,
 body.candidate-mode[data-candidate-view="loading"] .cv-panel,
 body.candidate-mode[data-candidate-view="loading"] .controls,
@@ -920,6 +953,39 @@ body.candidate-mode .recommendations-grid {
   line-height: 1.45;
 }
 
+.recommendation-meta-grid,
+.interview-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.info-pill {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #e0e6de;
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: #f9faf7;
+}
+
+.info-pill small {
+  color: #7a867f;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.info-pill strong {
+  min-width: 0;
+  color: #26352c;
+  font-size: 0.82rem;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
 .next-step {
   color: #24382f;
 }
@@ -1072,6 +1138,32 @@ body.candidate-mode .source-link {
   border-radius: 8px;
   padding: 12px;
   background: #ffffff;
+}
+
+.interview-job-highlight {
+  margin: 0;
+  color: #24382f;
+  font-size: 0.93rem;
+  line-height: 1.45;
+}
+
+.interview-job-details {
+  border-top: 1px solid #eef1ec;
+  padding-top: 8px;
+}
+
+.interview-job-details summary {
+  color: #143e2a;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.interview-job-details p {
+  margin: 8px 0 0;
+  color: #59685f;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .interview-chips {

@@ -1243,7 +1243,7 @@ function createRecommendationCard(item, type) {
   const header = document.createElement('div');
   const title = document.createElement('h4');
   const score = document.createElement('span');
-  const meta = document.createElement('p');
+  const meta = document.createElement('div');
   const highlight = document.createElement('p');
   const reasons = createRecommendationList('Por qué encaja', item.reasons);
   const secondary =
@@ -1265,11 +1265,12 @@ function createRecommendationCard(item, type) {
   score.textContent = `${Math.round(scoreValue)}%`;
   header.append(title, score);
 
-  meta.className = 'recommendation-card-meta';
-  meta.textContent =
-    type === 'job'
-      ? [item.company, item.fit_level ? `Ajuste ${item.fit_level}` : ''].filter(Boolean).join(' | ') || 'Vacante'
-      : item.provider || 'Curso';
+  meta.className = 'recommendation-meta-grid';
+  meta.append(
+    createInfoPill(type === 'job' ? 'Empresa' : 'Proveedor', type === 'job' ? item.company || getSourceLabel(item.source_url) : item.provider),
+    createInfoPill(type === 'job' ? 'Ajuste' : 'Tipo', type === 'job' ? item.fit_level || 'Por revisar' : 'Curso'),
+    createInfoPill('Fuente', getSourceLabel(item.source_url)),
+  );
 
   highlight.className = 'recommendation-highlight';
   highlight.textContent =
@@ -1283,7 +1284,7 @@ function createRecommendationCard(item, type) {
 
   details.className = 'recommendation-details';
   detailsLabel.textContent = 'Ver detalles';
-  details.append(detailsLabel, reasons, secondary);
+  details.append(detailsLabel, reasons, secondary, nextStep);
 
   link.className = 'source-link';
   link.href = item.source_url || '#';
@@ -1307,8 +1308,30 @@ function createRecommendationCard(item, type) {
   }
 
   actions.append(link);
-  article.append(header, meta, highlight, nextStep, details, actions);
+  article.append(header, meta, highlight, details, actions);
   return article;
+}
+
+function createInfoPill(label, value) {
+  const pill = document.createElement('span');
+  const labelElement = document.createElement('small');
+  const valueElement = document.createElement('strong');
+
+  pill.className = 'info-pill';
+  labelElement.textContent = label;
+  valueElement.textContent = value || 'No indicado';
+  pill.append(labelElement, valueElement);
+  return pill;
+}
+
+function getSourceLabel(url) {
+  if (!url) return '';
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
 }
 
 function createRecommendationList(label, values) {
@@ -1469,40 +1492,37 @@ async function openInterviewPractice(job) {
 function renderInterviewSession(session, context = null) {
   const selectedJob = session?.selected_job || context?.selected_job || {};
   const title = selectedJob.title || 'Vacante recomendada';
-  const meta = [
-    selectedJob.company,
-    selectedJob.location_text,
-    selectedJob.modality,
-    selectedJob.fit_level ? `Ajuste ${selectedJob.fit_level}` : '',
-  ].filter(Boolean);
-  const details = [
-    selectedJob.description,
-    Array.isArray(selectedJob.reasons) && selectedJob.reasons.length ? `Match: ${selectedJob.reasons.join(' ')}` : '',
-  ].filter(Boolean);
+  const reasons = Array.isArray(selectedJob.reasons) ? selectedJob.reasons.filter(Boolean) : [];
+  const primaryReason = reasons[0] || 'La práctica usará esta vacante como contexto principal.';
+  const description = [selectedJob.description, reasons.length ? `Match: ${reasons.join(' ')}` : ''].filter(Boolean).join(' ');
 
   elements.interviewTitle.textContent = title;
-  elements.interviewDetail.textContent = meta.length > 0 ? meta.join(' | ') : 'Entrevista simulada con base en la vacante elegida.';
+  elements.interviewDetail.textContent = 'Práctica corta basada en esta vacante.';
   elements.interviewJobSummary.replaceChildren();
 
-  if (details.length > 0) {
-    const summary = document.createElement('p');
-    summary.textContent = details.join(' ');
-    elements.interviewJobSummary.append(summary);
-  }
+  const metaGrid = document.createElement('div');
+  const highlight = document.createElement('p');
+  metaGrid.className = 'interview-meta-grid';
+  metaGrid.append(
+    createInfoPill('Empresa', selectedJob.company || selectedJob.provider),
+    createInfoPill('Ubicación', selectedJob.location_text),
+    createInfoPill('Modalidad', selectedJob.modality || selectedJob.employment_type),
+    createInfoPill('Match', selectedJob.score ? `${Math.round(selectedJob.score)}%` : selectedJob.fit_level),
+  );
+  highlight.className = 'interview-job-highlight';
+  highlight.textContent = primaryReason;
+  elements.interviewJobSummary.append(metaGrid, highlight);
 
-  const chips = [selectedJob.provider, selectedJob.employment_type, selectedJob.score ? `${Math.round(selectedJob.score)}% match` : '']
-    .filter(Boolean)
-    .map((value) => {
-      const chip = document.createElement('span');
-      chip.textContent = value;
-      return chip;
-    });
+  if (description) {
+    const details = document.createElement('details');
+    const detailsLabel = document.createElement('summary');
+    const detailsText = document.createElement('p');
 
-  if (chips.length > 0) {
-    const chipRow = document.createElement('div');
-    chipRow.className = 'interview-chips';
-    chipRow.append(...chips);
-    elements.interviewJobSummary.append(chipRow);
+    details.className = 'interview-job-details';
+    detailsLabel.textContent = 'Ver detalles de la vacante';
+    detailsText.textContent = description;
+    details.append(detailsLabel, detailsText);
+    elements.interviewJobSummary.append(details);
   }
 }
 
