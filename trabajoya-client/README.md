@@ -273,7 +273,7 @@ backend resume el feedback a un texto breve antes de llamar el servicio externo.
 
 La UI prepara el microfono con reduccion de ruido del navegador antes de iniciar
 la entrevista y avisa si detecta demasiado ruido de fondo. El agente de
-entrevista usa turnos mas agiles (`turn_timeout=4`, `turn_eagerness=high`) para
+entrevista usa turnos mas agiles (`turn_timeout=4`, `turn_eagerness=eager`) para
 reducir pausas en ambientes con ruido.
 
 ## Datasets de cursos

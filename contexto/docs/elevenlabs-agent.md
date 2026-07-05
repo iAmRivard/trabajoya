@@ -199,7 +199,7 @@ Reglas:
 - Despues de llamar `save_interview_feedback`, no hagas mas preguntas y
   finaliza la llamada si tienes la herramienta disponible.
 - Para reducir pausas en ambientes con ruido, configurar `turn.turn_timeout=4`
-  y `turn.turn_eagerness=high`.
+  y `turn.turn_eagerness=eager`.
 
 Estructura recomendada:
 1. Saluda y menciona la vacante elegida.
