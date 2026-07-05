@@ -166,7 +166,15 @@ OPENAI_API_KEY=...
 OPENAI_MATCH_MODEL=gpt-5.4-mini
 MATCH_MIN_INTERVAL_SECONDS=60
 MATCH_MAX_RESULTS_PER_TYPE=5
+EXA_JOB_FRESH_DAYS=45
+EXA_JOB_MAX_AGE_HOURS=6
 ```
+
+Para reducir vacantes vencidas, las busquedas live de empleos limitan resultados
+a paginas crawleadas recientemente, recargan contenido fresco de Exa y filtran
+textos que indiquen oferta expirada, cerrada o con fecha limite pasada. Si se
+necesitan mas resultados se puede subir `EXA_JOB_FRESH_DAYS`; si salen muchas
+vacantes viejas conviene bajarlo.
 
 ## Datasets de cursos
 

@@ -24,6 +24,8 @@ const recommendationPreRankLimit = 20;
 const defaultMatchCooldownSeconds = 60;
 const exaSearchTimeoutMs = 25000;
 const openAiMatchTimeoutMs = 45000;
+const defaultExaJobFreshDays = 45;
+const defaultExaJobMaxAgeHours = 6;
 const adminCookieName = 'trabajoya_admin';
 const adminSessionTtlSeconds = 60 * 60 * 8;
 const upload = multer({
@@ -1137,6 +1139,14 @@ function getMatchCooldownSeconds() {
   );
 }
 
+function getExaJobFreshDays() {
+  return clampNumber(Number(process.env.EXA_JOB_FRESH_DAYS || defaultExaJobFreshDays), 1, 365);
+}
+
+function getExaJobMaxAgeHours() {
+  return clampNumber(Number(process.env.EXA_JOB_MAX_AGE_HOURS || defaultExaJobMaxAgeHours), 0, 24 * 30);
+}
+
 function buildRecommendationProfileSnapshot(profileRow, intake = null) {
   const profile = profileRow.profile || {};
   const personal = profile.personal || {};
@@ -1211,31 +1221,49 @@ function buildRecommendationSearchConfigs(profileSnapshot, maxResults) {
   );
   const numResults = Math.max(maxResults * 2, 8);
   const primaryArea = roleTerms[0] || 'Perfil laboral';
+  const jobFreshAfter = getIsoDateDaysAgo(getExaJobFreshDays());
+  const jobMaxAgeHours = getExaJobMaxAgeHours();
+  const jobHighlightQuery = 'vacante vigente fecha publicacion fecha expiracion requisitos ubicacion salario aplicar';
 
   return {
     jobs: [
       {
         source: 'tecoloco',
         provider: 'Tecoloco',
-        query: cleanSearchQuery(`site:tecoloco.com.sv empleos ${primaryGoal} ${skillQuery} ${location} El Salvador`),
+        query: cleanSearchQuery(
+          `site:tecoloco.com.sv empleos vacantes vigentes publicadas recientemente aplicar ${primaryGoal} ${skillQuery} ${location} El Salvador`,
+        ),
         includeDomains: ['tecoloco.com.sv', 'www.tecoloco.com.sv'],
         area: primaryArea,
+        startCrawlDate: jobFreshAfter,
+        maxAgeHours: jobMaxAgeHours,
+        highlightQuery: jobHighlightQuery,
         numResults,
       },
       {
         source: 'computrabajo',
         provider: 'Computrabajo',
-        query: cleanSearchQuery(`site:sv.computrabajo.com empleos ${primaryGoal} ${skillQuery} ${location} El Salvador`),
+        query: cleanSearchQuery(
+          `site:sv.computrabajo.com empleos vacantes vigentes publicadas recientemente aplicar ${primaryGoal} ${skillQuery} ${location} El Salvador`,
+        ),
         includeDomains: ['sv.computrabajo.com'],
         area: primaryArea,
+        startCrawlDate: jobFreshAfter,
+        maxAgeHours: jobMaxAgeHours,
+        highlightQuery: jobHighlightQuery,
         numResults,
       },
       {
         source: 'mtps_oportunidades',
         provider: 'Ministerio de Trabajo - Oportunidades',
-        query: cleanSearchQuery(`site:oportunidades.mtps.gob.sv/job-offers ofertas laborales ${primaryGoal} ${location}`),
+        query: cleanSearchQuery(
+          `site:oportunidades.mtps.gob.sv/job-offers ofertas laborales vigentes aplicar ${primaryGoal} ${location}`,
+        ),
         includeDomains: ['oportunidades.mtps.gob.sv'],
         area: primaryArea,
+        startCrawlDate: jobFreshAfter,
+        maxAgeHours: jobMaxAgeHours,
+        highlightQuery: jobHighlightQuery,
         numResults,
       },
     ],
@@ -1310,6 +1338,7 @@ async function fetchLiveRecommendationCandidates(db, { searchQueries }) {
       try {
         const normalized = normalizeJobPayload(payload, config.source);
         const saved = await upsertJobVacancy(db, normalized);
+        if (normalized.status !== 'active') continue;
         jobs.push(buildJobCandidate(saved, normalized));
       } catch (error) {
         if (error?.message === 'missing_job_title') continue;
@@ -1349,6 +1378,26 @@ async function fetchLiveRecommendationCandidates(db, { searchQueries }) {
 }
 
 async function fetchExaSearch(config, maxCharacters) {
+  const body = {
+    query: config.query,
+    includeDomains: config.includeDomains,
+    numResults: config.numResults || 8,
+    startCrawlDate: config.startCrawlDate,
+    startPublishedDate: config.startPublishedDate,
+    userLocation: config.userLocation || 'SV',
+    contents: {
+      highlights: config.highlightQuery
+        ? {
+            query: config.highlightQuery,
+            maxCharacters: Math.min(maxCharacters, 1200),
+          }
+        : true,
+      text: {
+        maxCharacters,
+      },
+      maxAgeHours: config.maxAgeHours,
+    },
+  };
   const response = await fetchWithTimeout(
     'https://api.exa.ai/search',
     {
@@ -1358,17 +1407,7 @@ async function fetchExaSearch(config, maxCharacters) {
         'Content-Type': 'application/json',
         'x-api-key': getExaApiKey(),
       },
-      body: JSON.stringify({
-        query: config.query,
-        includeDomains: config.includeDomains,
-        numResults: config.numResults || 8,
-        contents: {
-          highlights: true,
-          text: {
-            maxCharacters,
-          },
-        },
-      }),
+      body: JSON.stringify(pruneUndefined(body)),
     },
     exaSearchTimeoutMs,
     'exa_request_timeout',
@@ -1424,6 +1463,8 @@ function normalizeExaJobResult(config, result) {
   const title = cleanExaJobTitle(result.title || result.url, config.provider);
   const salary = inferSalaryFromText(fullText);
   const department = inferDepartmentFromText(fullText);
+  const expiresAt = inferJobExpirationDateFromText(fullText);
+  const status = inferJobStatusFromText(fullText, expiresAt);
 
   return {
     source: config.source,
@@ -1442,11 +1483,12 @@ function normalizeExaJobResult(config, result) {
     salary_min: salary.min,
     salary_max: salary.max,
     currency: 'USD',
-    expires_at: inferDateFromText(fullText),
+    posted_at: parseOptionalDate(result.publishedDate),
+    expires_at: expiresAt,
     skills: inferSkillsFromText(fullText),
     source_url: result.url,
     apply_url: result.url,
-    status: 'active',
+    status,
     raw: {
       exa_id: result.id,
       published_date: result.publishedDate,
@@ -1533,6 +1575,61 @@ function inferDateFromText(text) {
   if (!slash) return null;
 
   return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`;
+}
+
+function inferJobExpirationDateFromText(text) {
+  const normalized = cleanText(text);
+  const patterns = [
+    /(?:vence|vencimiento|expira|expiracion|expiración|fecha limite|fecha límite|aplicar antes de|hasta el|finaliza|cierra)\D{0,45}(\d{4}-\d{2}-\d{2})/i,
+    /(?:vence|vencimiento|expira|expiracion|expiración|fecha limite|fecha límite|aplicar antes de|hasta el|finaliza|cierra)\D{0,45}(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+
+    if (!match) continue;
+
+    if (match[1] && /^\d{4}-\d{2}-\d{2}$/.test(match[1])) {
+      return match[1];
+    }
+
+    if (match[1] && match[2] && match[3]) {
+      return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+    }
+  }
+
+  return null;
+}
+
+function inferJobStatusFromText(text, expiresAt) {
+  const lower = normalizeAscii(text).toLowerCase();
+  const expiredFragments = [
+    'oferta expirada',
+    'oferta vencida',
+    'oferta cerrada',
+    'vacante expirada',
+    'vacante vencida',
+    'vacante cerrada',
+    'ya no esta disponible',
+    'ya no se encuentra disponible',
+    'esta oferta ya no esta disponible',
+    'esta vacante ya no esta disponible',
+    'proceso cerrado',
+    'plaza cubierta',
+    'publicacion cerrada',
+    'publicacion expirada',
+    'postulacion cerrada',
+    'postulaciones cerradas',
+    'application closed',
+    'job expired',
+    'position filled',
+  ];
+
+  if (expiredFragments.some((fragment) => lower.includes(fragment))) {
+    return 'closed';
+  }
+
+  return isPastDate(expiresAt) ? 'closed' : 'active';
 }
 
 function inferSkillsFromText(text) {
@@ -2322,6 +2419,8 @@ function normalizeJobPayload(job, fallbackSource = '') {
   const company = cleanText(job.company || job.company_name || job.employer || job.organization);
   const sourceUrl = cleanText(job.source_url || job.url || job.link);
   const applyUrl = cleanText(job.apply_url || job.applyUrl || job.application_url || sourceUrl);
+  const expiresAt = parseOptionalDate(job.expires_at || job.expiresAt || job.deadline || job.application_deadline);
+  const normalizedStatus = normalizeJobStatus(job.status);
   const externalId =
     cleanText(job.external_id || job.externalId || job.id || job.slug) ||
     createStableExternalId(source, title, sourceUrl);
@@ -2349,7 +2448,7 @@ function normalizeJobPayload(job, fallbackSource = '') {
     currency: cleanText(job.currency) || 'USD',
     schedule: cleanText(job.schedule || job.timetable),
     posted_at: parseOptionalDate(job.posted_at || job.postedAt || job.published_at || job.publishedAt),
-    expires_at: parseOptionalDate(job.expires_at || job.expiresAt || job.deadline || job.application_deadline),
+    expires_at: expiresAt,
     experience_level: cleanText(job.experience_level || job.experienceLevel || job.experience),
     education_level: cleanText(job.education_level || job.educationLevel || job.education),
     requirements: normalizeTextArray(job.requirements || job.requisitos),
@@ -2357,7 +2456,7 @@ function normalizeJobPayload(job, fallbackSource = '') {
     benefits: normalizeTextArray(job.benefits || job.beneficios),
     source_url: sourceUrl,
     apply_url: applyUrl,
-    status: normalizeJobStatus(job.status),
+    status: normalizedStatus === 'active' && isPastDate(expiresAt) ? 'closed' : normalizedStatus,
     raw: sanitizeForPostgresJson(job),
   };
 }
@@ -2899,6 +2998,26 @@ function uniqueCleanTexts(values) {
   return normalized;
 }
 
+function pruneUndefined(value) {
+  if (Array.isArray(value)) {
+    return value.map(pruneUndefined);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const pruned = {};
+
+  for (const [key, childValue] of Object.entries(value)) {
+    if (childValue === undefined || childValue === '') continue;
+
+    pruned[key] = pruneUndefined(childValue);
+  }
+
+  return pruned;
+}
+
 function normalizeAscii(value) {
   return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -2976,6 +3095,22 @@ function parseOptionalDate(value) {
   if (Number.isNaN(parsed)) return null;
 
   return new Date(parsed).toISOString().slice(0, 10);
+}
+
+function getIsoDateDaysAgo(days) {
+  const date = new Date();
+
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isPastDate(value) {
+  const date = parseOptionalDate(value);
+
+  if (!date) return false;
+
+  const today = new Date().toISOString().slice(0, 10);
+  return date < today;
 }
 
 function normalizeCourseStatus(value) {
