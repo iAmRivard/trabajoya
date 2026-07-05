@@ -25,6 +25,8 @@ docker-compose.yml       Compose para deploy en Dokploy desde GitHub
    con Exa y usar OpenAI para rankear recomendaciones reales.
 8. El candidato puede practicar una entrevista corta sobre una vacante
    recomendada; el feedback queda guardado en Postgres.
+9. Al guardar feedback de entrevista, el backend puede enviar un resumen corto
+   por audio al telefono registrado.
 
 ## Desarrollo local
 
@@ -56,6 +58,9 @@ EXA_API_KEY=...
 OPENAI_API_KEY=...
 ELEVENLABS_INTERVIEW_AGENT_ID=...
 TRABAJOYA_INTERVIEW_API_KEY=...
+VOICE_FEEDBACK_API_URL=https://wp-api.rivasystems.dev/api/voice/send
+VOICE_FEEDBACK_API_KEY=...
+VOICE_FEEDBACK_MAX_CHARS=700
 ```
 
 El compose espera que existan estas redes externas en el VPS:
@@ -162,6 +167,10 @@ El webhook de n8n para guardar feedback llama:
 POST /api/interview-feedback
 X-Trabajoya-Key: <TRABAJOYA_INTERVIEW_API_KEY>
 ```
+
+Si `VOICE_FEEDBACK_API_URL` y `VOICE_FEEDBACK_API_KEY` estan configuradas, ese
+guardado dispara un POST al servicio de audio con `{ text, phone }`. El texto se
+recorta con `VOICE_FEEDBACK_MAX_CHARS` para mantenerlo por debajo de un minuto.
 
 ## Insomnia
 

@@ -126,6 +126,11 @@ let conversationMode = null;
 let activeInterview = null;
 let interviewLoading = false;
 let interviewFeedbackTimer = null;
+let interviewAutoEndTimer = null;
+let interviewCloseAfterFeedback = false;
+let interviewFeedbackCompletedAt = 0;
+let interviewFinalAgentMessageAt = 0;
+let interviewAgentSpeaking = false;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -1166,6 +1171,7 @@ async function startInterviewConversation() {
         window.setTimeout(() => sendInterviewContext(conversationId), 700);
       },
       onDisconnect: (details) => {
+        clearInterviewAutoEndTimer();
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1175,6 +1181,7 @@ async function startInterviewConversation() {
       },
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de entrevista.');
+        clearInterviewAutoEndTimer();
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1182,18 +1189,30 @@ async function startInterviewConversation() {
         addEvent('error', message);
       },
       onModeChange: (mode) => {
-        const speaking = mode?.mode === 'speaking';
-        elements.agentStatus.textContent = speaking ? 'Entrevistando' : 'Escuchando';
+        interviewAgentSpeaking = mode?.mode === 'speaking';
+        elements.agentStatus.textContent = interviewAgentSpeaking ? 'Entrevistando' : 'Escuchando';
+
+        if (interviewCloseAfterFeedback && !interviewAgentSpeaking) {
+          scheduleInterviewAutoEndCheck(2200);
+        }
       },
       onMessage: (message) => {
         if (message?.message) {
+          if (interviewCloseAfterFeedback && (message.role === 'agent' || message.source !== 'user')) {
+            interviewFinalAgentMessageAt = Date.now();
+            scheduleInterviewAutoEndCheck(3200);
+          }
+
           addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
         }
       },
-      onAgentToolResponse: () => {
+      onAgentToolResponse: (toolResponse) => {
         setInterviewStatus('Feedback recibido del agente. Guardando...');
         addEvent('system', 'El agente envió feedback de entrevista.');
         scheduleInterviewFeedbackPoll(700);
+        if (isInterviewFeedbackToolResponse(toolResponse)) {
+          requestInterviewConversationEnd();
+        }
       },
     };
 
@@ -1205,6 +1224,77 @@ async function startInterviewConversation() {
     setInterviewStatus(getErrorMessage(error, 'No se pudo iniciar la práctica.'), 'error');
     addEvent('error', getErrorMessage(error, 'No se pudo iniciar la práctica.'));
   }
+}
+
+function isInterviewFeedbackToolResponse(toolResponse) {
+  const toolName = String(toolResponse?.tool_name || toolResponse?.toolName || toolResponse?.name || '').trim();
+
+  return !toolName || toolName === 'save_interview_feedback';
+}
+
+function requestInterviewConversationEnd() {
+  if (!conversation || conversationMode !== 'interview' || interviewCloseAfterFeedback) return;
+
+  interviewCloseAfterFeedback = true;
+  interviewFeedbackCompletedAt = Date.now();
+  interviewFinalAgentMessageAt = 0;
+  setInterviewStatus('Feedback guardado. Esperando despedida del agente...');
+  addEvent('system', 'Feedback recibido; cerraré la práctica cuando el agente termine de hablar.');
+  sendInterviewClosureInstruction();
+  scheduleInterviewAutoEndCheck(16000);
+}
+
+function sendInterviewClosureInstruction() {
+  if (!conversation || !activeInterview?.sessionId) return;
+
+  conversation.sendContextualUpdate(
+    [
+      'El feedback de la simulacion ya fue guardado.',
+      'No hagas mas preguntas ni agregues nuevas recomendaciones.',
+      'Despídete en una sola frase breve y termina la llamada.',
+    ].join(' '),
+    { contextId: `interview_feedback_saved_${activeInterview.sessionId}` },
+  );
+}
+
+function scheduleInterviewAutoEndCheck(delayMs = 2500) {
+  if (interviewAutoEndTimer) {
+    window.clearTimeout(interviewAutoEndTimer);
+  }
+
+  interviewAutoEndTimer = window.setTimeout(evaluateInterviewConversationEnd, delayMs);
+}
+
+async function evaluateInterviewConversationEnd() {
+  interviewAutoEndTimer = null;
+
+  if (!conversation || conversationMode !== 'interview' || !interviewCloseAfterFeedback) return;
+
+  const now = Date.now();
+  const hasFinalAgentMessage = interviewFinalAgentMessageAt > interviewFeedbackCompletedAt;
+  const finalMessageSettled = hasFinalAgentMessage && now - interviewFinalAgentMessageAt >= 2500;
+  const fallbackElapsed = now - interviewFeedbackCompletedAt >= 16000;
+
+  if (!interviewAgentSpeaking && (finalMessageSettled || fallbackElapsed)) {
+    interviewCloseAfterFeedback = false;
+    await stopConversation();
+    setInterviewStatus('Entrevista finalizada. Esperando feedback...');
+    return;
+  }
+
+  scheduleInterviewAutoEndCheck(interviewAgentSpeaking ? 2200 : 1200);
+}
+
+function clearInterviewAutoEndTimer() {
+  interviewCloseAfterFeedback = false;
+  interviewFeedbackCompletedAt = 0;
+  interviewFinalAgentMessageAt = 0;
+  interviewAgentSpeaking = false;
+
+  if (!interviewAutoEndTimer) return;
+
+  window.clearTimeout(interviewAutoEndTimer);
+  interviewAutoEndTimer = null;
 }
 
 function buildInterviewDynamicVariables() {
@@ -1234,6 +1324,7 @@ function sendInterviewContext(conversationId) {
     'Instrucciones:',
     activeInterview.context.instructions,
     'Al finalizar, llama save_interview_feedback con interview_session_id, elevenlabs_conversation_id, scores y feedback.',
+    'Despues de guardar feedback, despídete en una frase breve y termina la llamada. No hagas mas preguntas.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -1672,6 +1763,7 @@ async function startConversation() {
 async function stopConversation() {
   if (!conversation) return;
   clearCandidateAutoEndTimer();
+  clearInterviewAutoEndTimer();
   const activeConversation = conversation;
   const previousMode = conversationMode;
   conversation = null;

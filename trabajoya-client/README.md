@@ -261,7 +261,15 @@ Variables requeridas:
 ELEVENLABS_INTERVIEW_AGENT_ID=...
 TRABAJOYA_INTERVIEW_API_KEY=...
 N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL=https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
+VOICE_FEEDBACK_API_URL=https://wp-api.rivasystems.dev/api/voice/send
+VOICE_FEEDBACK_API_KEY=...
+VOICE_FEEDBACK_MAX_CHARS=700
+VOICE_FEEDBACK_TIMEOUT_MS=12000
 ```
+
+Cuando `VOICE_FEEDBACK_API_URL` y `VOICE_FEEDBACK_API_KEY` estan configuradas,
+`POST /api/interview-feedback` envia un audio corto al telefono del intake. El
+backend resume el feedback a un texto breve antes de llamar el servicio externo.
 
 ## Datasets de cursos
 

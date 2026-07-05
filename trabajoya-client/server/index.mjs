@@ -24,6 +24,8 @@ const recommendationPreRankLimit = 20;
 const defaultMatchCooldownSeconds = 60;
 const exaSearchTimeoutMs = 25000;
 const openAiMatchTimeoutMs = 45000;
+const defaultVoiceFeedbackTimeoutMs = 12000;
+const defaultVoiceFeedbackMaxChars = 700;
 const defaultExaJobFreshDays = 45;
 const defaultExaJobMaxAgeHours = 6;
 const adminCookieName = 'trabajoya_admin';
@@ -528,6 +530,8 @@ app.post('/api/interview-feedback', requireInterviewFeedbackWriter, async (reque
   try {
     const db = getPool();
     const saved = await saveInterviewFeedback(db, request.body);
+
+    scheduleInterviewFeedbackVoice(db, saved);
 
     response.json({
       ok: true,
@@ -1531,6 +1535,144 @@ async function saveInterviewFeedback(db, body) {
   return result.rows[0];
 }
 
+function scheduleInterviewFeedbackVoice(db, session) {
+  if (!isVoiceFeedbackConfigured() || !session?.id || session.status !== 'completed') return;
+
+  void sendInterviewFeedbackVoiceIfNeeded(db, session.id).catch((error) => {
+    console.error('[interview_voice_feedback]', error?.message || error);
+  });
+}
+
+async function sendInterviewFeedbackVoiceIfNeeded(db, sessionId) {
+  const delivery = await findInterviewVoiceDelivery(db, sessionId);
+
+  if (!delivery || delivery.status !== 'completed') return;
+  if (delivery.feedback_voice_attempted_at || delivery.feedback_voice_sent_at) return;
+
+  const phone = cleanText(delivery.phone_e164);
+  const text = buildInterviewVoiceFeedbackText(delivery);
+
+  if (!phone || !text) return;
+
+  const claimed = await db.query(
+    `
+    update public.candidate_interview_simulations
+    set
+      feedback_voice_text = $2,
+      feedback_voice_attempted_at = now(),
+      feedback_voice_error = null
+    where id = $1
+      and status = 'completed'
+      and feedback_voice_attempted_at is null
+      and feedback_voice_sent_at is null
+    returning id
+    `,
+    [sessionId, text],
+  );
+
+  if (claimed.rowCount === 0) return;
+
+  try {
+    await postVoiceFeedback({ phone, text });
+    await db.query(
+      `
+      update public.candidate_interview_simulations
+      set feedback_voice_sent_at = now(), feedback_voice_error = null
+      where id = $1
+      `,
+      [sessionId],
+    );
+  } catch (error) {
+    await db.query(
+      `
+      update public.candidate_interview_simulations
+      set feedback_voice_error = $2
+      where id = $1
+      `,
+      [sessionId, limitChars(cleanText(error?.message || 'voice_feedback_failed'), 500)],
+    );
+  }
+}
+
+async function findInterviewVoiceDelivery(db, sessionId) {
+  const result = await db.query(
+    `
+    select
+      simulations.*,
+      intakes.phone_e164,
+      intakes.full_name as intake_full_name
+    from public.candidate_interview_simulations simulations
+    join public.candidate_intakes intakes
+      on intakes.id = simulations.intake_id
+    where simulations.id = $1
+    limit 1
+    `,
+    [sessionId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function postVoiceFeedback({ phone, text }) {
+  const url = getVoiceFeedbackApiUrl();
+  const apiKey = getVoiceFeedbackApiKey();
+
+  if (!url || !apiKey) return;
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': apiKey,
+      },
+      body: JSON.stringify({ text, phone }),
+    },
+    getVoiceFeedbackTimeoutMs(),
+    'voice_feedback_timeout',
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`voice_feedback_failed_${response.status}${detail ? `: ${limitChars(detail, 160)}` : ''}`);
+  }
+}
+
+function buildInterviewVoiceFeedbackText(session) {
+  const feedback = session.feedback && typeof session.feedback === 'object' ? session.feedback : {};
+  const scores = session.scores && typeof session.scores === 'object' ? session.scores : {};
+  const selectedJob = session.selected_job && typeof session.selected_job === 'object' ? session.selected_job : {};
+  const score = normalizeOptionalScore(feedback.overall_score ?? scores.overall);
+  const title = cleanText(selectedJob.title);
+  const strengths = normalizeTextArray(feedback.strengths).slice(0, 2);
+  const improvements = normalizeTextArray(feedback.improvements).slice(0, 2);
+  const nextStep = normalizeTextArray(feedback.next_steps)[0] || cleanText(feedback.closing_note);
+  const parts = [
+    `TrabajoYA: tu practica de entrevista${title ? ` para ${title}` : ''} ya tiene feedback.`,
+    score !== null ? `Puntaje general: ${score} de 100.` : '',
+    cleanText(feedback.summary),
+    strengths.length ? `Fortalezas: ${strengths.join('; ')}.` : '',
+    improvements.length ? `Para mejorar: ${improvements.join('; ')}.` : '',
+    nextStep ? `Siguiente paso: ${nextStep}.` : '',
+  ];
+
+  return limitVoiceFeedbackText(parts.filter(Boolean).join(' '), getVoiceFeedbackMaxChars());
+}
+
+function limitVoiceFeedbackText(text, maxChars) {
+  const value = cleanText(text).replace(/\s+/g, ' ');
+
+  if (value.length <= maxChars) return value;
+
+  const sliced = value.slice(0, maxChars).trim();
+  const sentenceBreak = Math.max(sliced.lastIndexOf('. '), sliced.lastIndexOf('; '));
+  const wordBreak = sliced.lastIndexOf(' ');
+  const boundary = sentenceBreak > 240 ? sentenceBreak + 1 : wordBreak > 240 ? wordBreak : sliced.length;
+
+  return `${sliced.slice(0, boundary).trim().replace(/[.,;:]+$/, '')}.`;
+}
+
 function normalizeInterviewFeedback(value) {
   const feedback = value && typeof value === 'object' ? value : {};
 
@@ -1615,6 +1757,7 @@ function buildInterviewAgentContext({ session, intake, profileSnapshot, selected
       'No pidas DUI, documentos, datos de salud, religion, politica, apariencia, genero, orientacion sexual ni finanzas.',
       'No prometas contratacion.',
       'Al terminar, llama la herramienta save_interview_feedback con feedback estructurado.',
+      'Despues de guardar feedback, despídete en una frase breve y termina la llamada. No hagas mas preguntas.',
     ].join(' '),
   };
 }
@@ -1637,6 +1780,9 @@ function serializeInterviewSession(session) {
     status: session.status,
     feedback,
     scores,
+    feedback_voice_attempted_at: session.feedback_voice_attempted_at || null,
+    feedback_voice_sent_at: session.feedback_voice_sent_at || null,
+    feedback_voice_error: session.feedback_voice_error || '',
     completed_at: session.completed_at,
     created_at: session.created_at,
     updated_at: session.updated_at,
@@ -3272,6 +3418,26 @@ function getInterviewApiKey() {
 
 function getInterviewFeedbackWebhookUrl() {
   return cleanText(process.env.N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL);
+}
+
+function getVoiceFeedbackApiUrl() {
+  return cleanText(process.env.VOICE_FEEDBACK_API_URL || process.env.INTERVIEW_VOICE_FEEDBACK_API_URL);
+}
+
+function getVoiceFeedbackApiKey() {
+  return cleanText(process.env.VOICE_FEEDBACK_API_KEY || process.env.INTERVIEW_VOICE_FEEDBACK_API_KEY);
+}
+
+function getVoiceFeedbackMaxChars() {
+  return clampNumber(Number(process.env.VOICE_FEEDBACK_MAX_CHARS || defaultVoiceFeedbackMaxChars), 300, 900);
+}
+
+function getVoiceFeedbackTimeoutMs() {
+  return clampNumber(Number(process.env.VOICE_FEEDBACK_TIMEOUT_MS || defaultVoiceFeedbackTimeoutMs), 3000, 30000);
+}
+
+function isVoiceFeedbackConfigured() {
+  return Boolean(getVoiceFeedbackApiUrl() && getVoiceFeedbackApiKey());
 }
 
 function setAdminSessionCookie(response) {

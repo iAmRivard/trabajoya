@@ -141,4 +141,6 @@ Workflow:
 3. HTTP Request llama `POST /api/interview-feedback` en TrabajoYA con la misma
    key.
 4. El backend actualiza `public.candidate_interview_simulations`.
-5. Respond to Webhook devuelve `{ "ok": true, "message": "Feedback guardado." }`.
+5. Si `VOICE_FEEDBACK_API_URL` y `VOICE_FEEDBACK_API_KEY` estan configuradas, el
+   backend envia un resumen corto de feedback por audio al telefono del intake.
+6. Respond to Webhook devuelve `{ "ok": true, "message": "Feedback guardado." }`.

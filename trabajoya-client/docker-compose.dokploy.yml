@@ -29,6 +29,10 @@ services:
       ELEVENLABS_INTERVIEW_AGENT_ID: ${ELEVENLABS_INTERVIEW_AGENT_ID:-}
       TRABAJOYA_INTERVIEW_API_KEY: ${TRABAJOYA_INTERVIEW_API_KEY:-}
       N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL: ${N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL:-https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback}
+      VOICE_FEEDBACK_API_URL: ${VOICE_FEEDBACK_API_URL:-}
+      VOICE_FEEDBACK_API_KEY: ${VOICE_FEEDBACK_API_KEY:-}
+      VOICE_FEEDBACK_MAX_CHARS: ${VOICE_FEEDBACK_MAX_CHARS:-700}
+      VOICE_FEEDBACK_TIMEOUT_MS: ${VOICE_FEEDBACK_TIMEOUT_MS:-12000}
     labels:
       traefik.enable: "true"
       traefik.http.routers.trabajoya-web.entrypoints: web
