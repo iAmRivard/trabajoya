@@ -271,6 +271,11 @@ Cuando `VOICE_FEEDBACK_API_URL` y `VOICE_FEEDBACK_API_KEY` estan configuradas,
 `POST /api/interview-feedback` envia un audio corto al telefono del intake. El
 backend resume el feedback a un texto breve antes de llamar el servicio externo.
 
+La UI prepara el microfono con reduccion de ruido del navegador antes de iniciar
+la entrevista y avisa si detecta demasiado ruido de fondo. El agente de
+entrevista usa turnos mas agiles (`turn_timeout=4`, `turn_eagerness=high`) para
+reducir pausas en ambientes con ruido.
+
 ## Datasets de cursos
 
 El MVP de cursos usa Exa + n8n para sincronizar fuentes publicas hacia

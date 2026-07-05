@@ -111,6 +111,9 @@ function buildConversationConfig(config) {
   nextConfig.agent.disable_first_message_interruptions = true;
   nextConfig.conversation ||= {};
   nextConfig.conversation.max_duration_seconds = 420;
+  nextConfig.turn ||= {};
+  nextConfig.turn.turn_timeout = 4;
+  nextConfig.turn.turn_eagerness = 'high';
 
   const prompt = typeof nextConfig.agent.prompt === 'object' && nextConfig.agent.prompt !== null ? nextConfig.agent.prompt : {};
   prompt.prompt = interviewPrompt;

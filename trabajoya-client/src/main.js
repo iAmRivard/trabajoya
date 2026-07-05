@@ -132,9 +132,102 @@ let interviewFeedbackCompletedAt = 0;
 let interviewFinalAgentMessageAt = 0;
 let interviewAgentSpeaking = false;
 
+const noisyMicrophoneThreshold = 0.075;
+const veryNoisyMicrophoneThreshold = 0.12;
+
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
   return error?.message || fallback;
+}
+
+function getVoiceMicrophoneConstraints() {
+  const supported = navigator.mediaDevices?.getSupportedConstraints?.() || {};
+  const constraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: { ideal: 1 },
+  };
+
+  if (supported.sampleRate) constraints.sampleRate = { ideal: 16000 };
+  if ('voiceIsolation' in supported) constraints.voiceIsolation = true;
+
+  return constraints;
+}
+
+async function prepareVoiceMicrophone() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: getVoiceMicrophoneConstraints(),
+  });
+
+  try {
+    return await measureAmbientNoise(stream);
+  } finally {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
+async function measureAmbientNoise(stream) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContextClass) return { level: null, kind: 'unknown' };
+
+  const context = new AudioContextClass();
+  const source = context.createMediaStreamSource(stream);
+  const analyser = context.createAnalyser();
+  const readings = [];
+  analyser.fftSize = 1024;
+  const samples = new Uint8Array(analyser.fftSize);
+  source.connect(analyser);
+
+  try {
+    await context.resume();
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < 900) {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        sum += normalized * normalized;
+      }
+
+      readings.push(Math.sqrt(sum / samples.length));
+      await wait(90);
+    }
+  } finally {
+    source.disconnect();
+    await context.close().catch(() => {});
+  }
+
+  const level =
+    readings.length > 0 ? readings.reduce((total, reading) => total + reading, 0) / readings.length : null;
+
+  return {
+    level,
+    kind:
+      level === null
+        ? 'unknown'
+        : level >= veryNoisyMicrophoneThreshold
+          ? 'very_noisy'
+          : level >= noisyMicrophoneThreshold
+            ? 'noisy'
+            : 'ok',
+  };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function describeMicrophoneCheck(check) {
+  if (!check || check.kind === 'unknown') return 'Micrófono listo.';
+  if (check.kind === 'very_noisy') return 'Hay bastante ruido de fondo; intenta usar audífonos o acercarte al micrófono.';
+  if (check.kind === 'noisy') return 'Detecté algo de ruido de fondo; hablar cerca del micrófono ayudará a que no se pause.';
+  return 'Micrófono listo con reducción de ruido.';
 }
 
 createIcons({
@@ -1154,11 +1247,15 @@ async function startInterviewConversation() {
     setInterviewStatus('Solicitando acceso al micrófono...');
     addEvent('system', 'Solicitando acceso al micrófono para práctica.');
 
-    await navigator.mediaDevices.getUserMedia({ audio: true });
+    const microphoneCheck = await prepareVoiceMicrophone();
+    const microphoneMessage = describeMicrophoneCheck(microphoneCheck);
+    setInterviewStatus(microphoneMessage);
+    addEvent('system', microphoneMessage);
 
     const sessionOptions = {
       agentId: activeInterview.agentId,
       connectionType: 'webrtc',
+      preferHeadphonesForIosDevices: true,
       dynamicVariables: buildInterviewDynamicVariables(),
       onConversationCreated: (createdConversation) => {
         conversation = createdConversation;
@@ -1689,11 +1786,13 @@ async function startConversation() {
     elements.startButton.disabled = true;
     addEvent('system', 'Solicitando acceso al micrófono.');
 
-    await navigator.mediaDevices.getUserMedia({ audio: true });
+    const microphoneCheck = await prepareVoiceMicrophone();
+    addEvent('system', describeMicrophoneCheck(microphoneCheck));
 
     const sessionOptions = {
       agentId: AGENT_ID,
       connectionType: 'webrtc',
+      preferHeadphonesForIosDevices: true,
       onConversationCreated: (createdConversation) => {
         conversation = createdConversation;
       },
