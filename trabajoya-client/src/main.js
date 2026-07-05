@@ -87,6 +87,7 @@ const elements = {
   agentStatus: document.querySelector('#agentStatus'),
   sessionTitle: document.querySelector('#sessionTitle'),
   sessionDetail: document.querySelector('#sessionDetail'),
+  candidateProfileFacts: document.querySelector('#candidateProfileFacts'),
   panelTitle: document.querySelector('#panelTitle'),
   adminAuthPanel: document.querySelector('#adminAuthPanel'),
   adminLoginForm: document.querySelector('#adminLoginForm'),
@@ -657,22 +658,24 @@ function updateCandidateSessionCopy() {
   if (!intake) {
     elements.sessionTitle.textContent = 'Preparando tu perfil';
     elements.sessionDetail.textContent = 'El enlace se está cargando.';
+    elements.candidateProfileFacts.hidden = true;
+    elements.candidateProfileFacts.replaceChildren();
     return;
   }
 
   const name = intake.full_name ? `Perfil de ${intake.full_name}` : 'Construcción de perfil';
   const location = [intake.municipality, intake.department].filter(Boolean).join(', ');
-  const details = [
-    intake.desired_role ? `Objetivo: ${intake.desired_role}` : '',
-    location ? `Zona: ${location}` : '',
-    intake.initial_data?.cv_text ? 'CV recibido' : 'CV opcional',
-  ].filter(Boolean);
 
   elements.sessionTitle.textContent = name;
-  elements.sessionDetail.textContent =
-    details.length > 0
-      ? details.join(' | ')
-      : 'TrabajoYA te guiará para completar tu perfil laboral.';
+  elements.sessionDetail.textContent = isCandidateProfileCompleted()
+    ? 'Tu perfil quedó guardado. Puedes continuar con recomendaciones.'
+    : 'TrabajoYA te hará preguntas cortas para completar tu perfil.';
+  elements.candidateProfileFacts.hidden = false;
+  elements.candidateProfileFacts.replaceChildren(
+    createInfoPill('Objetivo', intake.desired_role || 'Por completar'),
+    createInfoPill('Ubicación', location || 'Por completar'),
+    createInfoPill('CV', intake.initial_data?.cv_text ? 'Recibido' : 'Opcional'),
+  );
 }
 
 async function loadCandidateIntake() {

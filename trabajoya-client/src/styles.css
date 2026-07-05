@@ -437,6 +437,31 @@ body.candidate-mode .status-item:nth-child(3) {
   display: none;
 }
 
+body.candidate-mode[data-candidate-view="profile"] .status-strip {
+  display: none;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .candidate-gate {
+  gap: 8px;
+  padding: 11px 12px;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .candidate-gate .eyebrow,
+body.candidate-mode[data-candidate-view="profile"] .candidate-flow {
+  display: none;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .candidate-gate h2 {
+  margin-bottom: 3px;
+  font-size: 0.98rem;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .candidate-gate p,
+body.candidate-mode[data-candidate-view="profile"] .verify-status {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 body.candidate-mode.recommendations-mode .candidate-gate,
 body.candidate-mode.interview-mode .candidate-gate,
 body.candidate-mode[data-candidate-view="feedback"] .candidate-gate,
@@ -611,6 +636,25 @@ body.candidate-mode .session-copy p {
   max-width: none;
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .voice-orbit {
+  display: none;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .voice-surface {
+  padding: 13px;
+}
+
+body.candidate-mode[data-candidate-view="profile"] .session-copy h2 {
+  font-size: 1.18rem;
+}
+
+.candidate-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
 }
 
 .controls {

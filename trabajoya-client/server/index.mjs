@@ -26,6 +26,7 @@ const exaSearchTimeoutMs = 25000;
 const openAiMatchTimeoutMs = 45000;
 const defaultVoiceFeedbackTimeoutMs = 12000;
 const defaultVoiceFeedbackMaxChars = 700;
+const defaultVoiceFeedbackMessageText = 'Recomendaciones.';
 const defaultExaJobFreshDays = 45;
 const defaultExaJobMaxAgeHours = 6;
 const adminCookieName = 'trabajoya_admin';
@@ -1574,6 +1575,7 @@ async function sendInterviewFeedbackVoiceIfNeeded(db, sessionId) {
 
   try {
     await postVoiceFeedback({ phone, text });
+    await postVoiceFeedbackFollowupMessageIfNeeded({ phone, session: delivery });
     await db.query(
       `
       update public.candidate_interview_simulations
@@ -1600,6 +1602,7 @@ async function findInterviewVoiceDelivery(db, sessionId) {
     select
       simulations.*,
       intakes.phone_e164,
+      intakes.code as intake_code,
       intakes.full_name as intake_full_name
     from public.candidate_interview_simulations simulations
     join public.candidate_intakes intakes
@@ -1637,6 +1640,61 @@ async function postVoiceFeedback({ phone, text }) {
     const detail = await response.text().catch(() => '');
     throw new Error(`voice_feedback_failed_${response.status}${detail ? `: ${limitChars(detail, 160)}` : ''}`);
   }
+}
+
+async function postVoiceFeedbackFollowupMessageIfNeeded({ phone, session }) {
+  if (!isVoiceFeedbackMessageConfigured()) return;
+
+  const text = buildVoiceFeedbackFollowupMessage(session);
+
+  if (!phone || !text) return;
+
+  try {
+    await postVoiceFeedbackMessage({ phone, text });
+  } catch (error) {
+    console.error('[interview_voice_message]', error?.message || error);
+  }
+}
+
+async function postVoiceFeedbackMessage({ phone, text }) {
+  const url = getVoiceFeedbackMessageApiUrl();
+  const apiKey = getVoiceFeedbackMessageApiKey();
+
+  if (!url || !apiKey) return;
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': apiKey,
+      },
+      body: JSON.stringify({ text, phone }),
+    },
+    getVoiceFeedbackTimeoutMs(),
+    'voice_feedback_message_timeout',
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`voice_feedback_message_failed_${response.status}${detail ? `: ${limitChars(detail, 160)}` : ''}`);
+  }
+}
+
+function buildVoiceFeedbackFollowupMessage(session) {
+  const template = getVoiceFeedbackMessageText();
+  const code = cleanText(session?.intake_code);
+  const link = code ? buildCandidateUrlFromEnv(code) : '';
+
+  return limitChars(
+    template
+      .replaceAll('{code}', code)
+      .replaceAll('{link}', link)
+      .replace(/\s+/g, ' ')
+      .trim(),
+    900,
+  );
 }
 
 function buildInterviewVoiceFeedbackText(session) {
@@ -3428,6 +3486,26 @@ function getVoiceFeedbackApiKey() {
   return cleanText(process.env.VOICE_FEEDBACK_API_KEY || process.env.INTERVIEW_VOICE_FEEDBACK_API_KEY);
 }
 
+function getVoiceFeedbackMessageApiUrl() {
+  return cleanText(
+    process.env.VOICE_FEEDBACK_MESSAGE_API_URL ||
+      process.env.INTERVIEW_VOICE_FEEDBACK_MESSAGE_API_URL ||
+      deriveVoiceFeedbackMessageApiUrl(getVoiceFeedbackApiUrl()),
+  );
+}
+
+function getVoiceFeedbackMessageApiKey() {
+  return cleanText(
+    process.env.VOICE_FEEDBACK_MESSAGE_API_KEY ||
+      process.env.INTERVIEW_VOICE_FEEDBACK_MESSAGE_API_KEY ||
+      getVoiceFeedbackApiKey(),
+  );
+}
+
+function getVoiceFeedbackMessageText() {
+  return cleanText(process.env.VOICE_FEEDBACK_MESSAGE_TEXT || process.env.INTERVIEW_VOICE_FEEDBACK_MESSAGE_TEXT) || defaultVoiceFeedbackMessageText;
+}
+
 function getVoiceFeedbackMaxChars() {
   return clampNumber(Number(process.env.VOICE_FEEDBACK_MAX_CHARS || defaultVoiceFeedbackMaxChars), 300, 900);
 }
@@ -3438,6 +3516,41 @@ function getVoiceFeedbackTimeoutMs() {
 
 function isVoiceFeedbackConfigured() {
   return Boolean(getVoiceFeedbackApiUrl() && getVoiceFeedbackApiKey());
+}
+
+function isVoiceFeedbackMessageConfigured() {
+  return Boolean(getVoiceFeedbackMessageApiUrl() && getVoiceFeedbackMessageApiKey() && getVoiceFeedbackMessageText());
+}
+
+function deriveVoiceFeedbackMessageApiUrl(url) {
+  const value = cleanText(url);
+
+  if (!value) return '';
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.endsWith('/api/voice/send')) {
+      parsed.pathname = parsed.pathname.replace(/\/api\/voice\/send$/, '/api/message/send');
+      return parsed.toString();
+    }
+
+    if (parsed.pathname.endsWith('/voice/send')) {
+      parsed.pathname = parsed.pathname.replace(/\/voice\/send$/, '/message/send');
+      return parsed.toString();
+    }
+  } catch {
+    return '';
+  }
+
+  return '';
+}
+
+function buildCandidateUrlFromEnv(code) {
+  const baseUrl = cleanText(process.env.PUBLIC_APP_URL);
+
+  if (!baseUrl || !code) return '';
+
+  return `${baseUrl.replace(/\/$/, '')}/c/${code}`;
 }
 
 function setAdminSessionCookie(response) {

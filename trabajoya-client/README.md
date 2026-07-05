@@ -263,6 +263,9 @@ TRABAJOYA_INTERVIEW_API_KEY=...
 N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL=https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
 VOICE_FEEDBACK_API_URL=https://wp-api.rivasystems.dev/api/voice/send
 VOICE_FEEDBACK_API_KEY=...
+VOICE_FEEDBACK_MESSAGE_API_URL=
+VOICE_FEEDBACK_MESSAGE_API_KEY=
+VOICE_FEEDBACK_MESSAGE_TEXT=Recomendaciones.
 VOICE_FEEDBACK_MAX_CHARS=700
 VOICE_FEEDBACK_TIMEOUT_MS=12000
 ```
@@ -270,6 +273,11 @@ VOICE_FEEDBACK_TIMEOUT_MS=12000
 Cuando `VOICE_FEEDBACK_API_URL` y `VOICE_FEEDBACK_API_KEY` estan configuradas,
 `POST /api/interview-feedback` envia un audio corto al telefono del intake. El
 backend resume el feedback a un texto breve antes de llamar el servicio externo.
+Despues de enviar el audio, el backend intenta enviar tambien un mensaje de texto
+por `VOICE_FEEDBACK_MESSAGE_API_URL`. Si esa variable queda vacia, deriva el
+endpoint cambiando `/api/voice/send` por `/api/message/send` y reutiliza
+`VOICE_FEEDBACK_API_KEY`. El texto default es `Recomendaciones.` y puede usar
+`{code}` o `{link}` si se configura una plantilla.
 
 La UI prepara el microfono con reduccion de ruido del navegador antes de iniciar
 la entrevista y avisa si detecta demasiado ruido de fondo. El agente de
