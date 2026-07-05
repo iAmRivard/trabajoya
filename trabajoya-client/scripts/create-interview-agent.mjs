@@ -222,10 +222,8 @@ function saveInterviewFeedbackTool() {
 function schemaField(schema) {
   const defaultConstantValue =
     schema.type === 'array' ? [] : schema.type === 'object' ? {} : schema.type === 'boolean' ? false : '';
-
-  return {
+  const field = {
     description: '',
-    enum: null,
     is_system_provided: false,
     dynamic_variable: '',
     allowed_values_dynamic_variable: '',
@@ -233,4 +231,10 @@ function schemaField(schema) {
     is_omitted: false,
     ...schema,
   };
+
+  if (!['array', 'object'].includes(schema.type)) {
+    field.enum ??= null;
+  }
+
+  return field;
 }
