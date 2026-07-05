@@ -300,6 +300,51 @@ app.post('/api/datasets/courses/upsert', requireDatasetWriter, async (request, r
   }
 });
 
+app.post('/api/datasets/jobs/upsert', requireDatasetWriter, async (request, response) => {
+  try {
+    const db = getPool();
+    const jobs = getJobPayloads(request.body);
+    const source = cleanText(request.body.source) || cleanText(request.body.sync?.source) || '';
+    const syncMetadata = request.body.sync && typeof request.body.sync === 'object' ? request.body.sync : {};
+    const saved = [];
+
+    if (jobs.length === 0) {
+      response.status(400).json({
+        ok: false,
+        error: 'Envia al menos una vacante en jobs.',
+      });
+      return;
+    }
+
+    for (const job of jobs.slice(0, 250)) {
+      const normalizedJob = normalizeJobPayload(job, source);
+      const result = await upsertJobVacancy(db, normalizedJob);
+      saved.push(result);
+    }
+
+    await recordDatasetSyncRun(db, {
+      dataset: 'jobs',
+      source: source || 'mixed',
+      itemsSeen: jobs.length,
+      itemsUpserted: saved.length,
+      metadata: syncMetadata,
+    });
+
+    response.json({
+      ok: true,
+      dataset: 'jobs',
+      received: jobs.length,
+      upserted: saved.length,
+      jobs: saved,
+    });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
 app.post('/api/cv/extract', upload.single('cv'), async (request, response) => {
   try {
     if (!request.file) {
@@ -425,6 +470,64 @@ app.get('/api/courses', requireAdminSession, async (request, response) => {
     response.json({
       ok: true,
       courses: result.rows,
+    });
+  } catch (error) {
+    response.status(503).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/jobs', requireAdminSession, async (request, response) => {
+  const limit = clampNumber(Number(request.query.limit || 50), 1, 200);
+  const source = cleanText(request.query.source);
+  const status = cleanText(request.query.status || 'active');
+  const query = cleanText(request.query.q);
+  const department = cleanText(request.query.department);
+  const filters = [];
+  const values = [];
+
+  if (source) {
+    values.push(source);
+    filters.push(`source = $${values.length}`);
+  }
+
+  if (status && status !== 'all') {
+    values.push(status);
+    filters.push(`status = $${values.length}`);
+  }
+
+  if (department) {
+    values.push(department);
+    filters.push(`department = $${values.length}`);
+  }
+
+  if (query) {
+    values.push(`%${query}%`);
+    filters.push(
+      `(title ilike $${values.length} or company ilike $${values.length} or provider ilike $${values.length} or description ilike $${values.length})`,
+    );
+  }
+
+  values.push(limit);
+
+  try {
+    const db = getPool();
+    const result = await db.query(
+      `
+      select *
+      from public.job_vacancies
+      ${filters.length > 0 ? `where ${filters.join(' and ')}` : ''}
+      order by last_seen_at desc, updated_at desc
+      limit $${values.length}
+      `,
+      values,
+    );
+
+    response.json({
+      ok: true,
+      jobs: result.rows,
     });
   } catch (error) {
     response.status(503).json({
@@ -746,6 +849,180 @@ async function upsertCourse(db, course) {
       content_hash = excluded.content_hash,
       last_seen_at = now()
     returning id, source, external_id, title, provider, status, source_url, updated_at
+    `,
+    values,
+  );
+
+  return result.rows[0];
+}
+
+function getJobPayloads(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.jobs)) return body.jobs;
+  if (Array.isArray(body?.vacancies)) return body.vacancies;
+  if (Array.isArray(body?.items)) return body.items;
+  if (body?.job && typeof body.job === 'object') return [body.job];
+  if (body?.vacancy && typeof body.vacancy === 'object') return [body.vacancy];
+  if (body && typeof body === 'object') return [body];
+  return [];
+}
+
+function normalizeJobPayload(job, fallbackSource = '') {
+  const source = cleanText(job.source || fallbackSource || 'exa');
+  const provider = cleanText(job.provider || job.job_board || job.platform || source);
+  const title = cleanText(job.title || job.name || job.position || job.role);
+  const company = cleanText(job.company || job.company_name || job.employer || job.organization);
+  const sourceUrl = cleanText(job.source_url || job.url || job.link);
+  const applyUrl = cleanText(job.apply_url || job.applyUrl || job.application_url || sourceUrl);
+  const externalId =
+    cleanText(job.external_id || job.externalId || job.id || job.slug) ||
+    createStableExternalId(source, title, sourceUrl);
+
+  if (!title) {
+    throw new Error('missing_job_title');
+  }
+
+  return {
+    source,
+    external_id: externalId,
+    provider,
+    title,
+    company,
+    area: cleanText(job.area || job.category || job.department_area || job.job_area),
+    description: limitChars(cleanText(job.description || job.summary || job.text), 5000),
+    employment_type: cleanText(job.employment_type || job.employmentType || job.contract_type || job.contractType),
+    modality: cleanText(job.modality || job.mode || job.work_mode || job.workMode),
+    country: cleanText(job.country) || 'El Salvador',
+    department: cleanText(job.department || job.state),
+    municipality: cleanText(job.municipality || job.city),
+    location_text: cleanText(job.location_text || job.location || job.locationText),
+    salary_min: parseOptionalNumber(job.salary_min ?? job.salaryMin ?? job.min_salary ?? job.minSalary),
+    salary_max: parseOptionalNumber(job.salary_max ?? job.salaryMax ?? job.max_salary ?? job.maxSalary),
+    currency: cleanText(job.currency) || 'USD',
+    schedule: cleanText(job.schedule || job.timetable),
+    posted_at: parseOptionalDate(job.posted_at || job.postedAt || job.published_at || job.publishedAt),
+    expires_at: parseOptionalDate(job.expires_at || job.expiresAt || job.deadline || job.application_deadline),
+    experience_level: cleanText(job.experience_level || job.experienceLevel || job.experience),
+    education_level: cleanText(job.education_level || job.educationLevel || job.education),
+    requirements: normalizeTextArray(job.requirements || job.requisitos),
+    skills: normalizeTextArray(job.skills || job.habilidades),
+    benefits: normalizeTextArray(job.benefits || job.beneficios),
+    source_url: sourceUrl,
+    apply_url: applyUrl,
+    status: normalizeJobStatus(job.status),
+    raw: job,
+  };
+}
+
+async function upsertJobVacancy(db, job) {
+  const contentHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        ...job,
+        raw: undefined,
+      }),
+    )
+    .digest('hex');
+  const values = [
+    job.source,
+    job.external_id,
+    job.provider,
+    job.title,
+    job.company,
+    job.area,
+    job.description,
+    job.employment_type,
+    job.modality,
+    job.country,
+    job.department,
+    job.municipality,
+    job.location_text,
+    job.salary_min,
+    job.salary_max,
+    job.currency,
+    job.schedule,
+    job.posted_at,
+    job.expires_at,
+    job.experience_level,
+    job.education_level,
+    JSON.stringify(job.requirements),
+    JSON.stringify(job.skills),
+    JSON.stringify(job.benefits),
+    job.source_url,
+    job.apply_url,
+    job.status,
+    JSON.stringify(job.raw),
+    contentHash,
+  ];
+  const result = await db.query(
+    `
+    insert into public.job_vacancies (
+      source,
+      external_id,
+      provider,
+      title,
+      company,
+      area,
+      description,
+      employment_type,
+      modality,
+      country,
+      department,
+      municipality,
+      location_text,
+      salary_min,
+      salary_max,
+      currency,
+      schedule,
+      posted_at,
+      expires_at,
+      experience_level,
+      education_level,
+      requirements,
+      skills,
+      benefits,
+      source_url,
+      apply_url,
+      status,
+      raw,
+      content_hash
+    )
+    values (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+      $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+      $21, $22::jsonb, $23::jsonb, $24::jsonb, $25, $26, $27, $28::jsonb, $29
+    )
+    on conflict (source, external_id)
+    do update set
+      provider = excluded.provider,
+      title = excluded.title,
+      company = excluded.company,
+      area = excluded.area,
+      description = excluded.description,
+      employment_type = excluded.employment_type,
+      modality = excluded.modality,
+      country = excluded.country,
+      department = excluded.department,
+      municipality = excluded.municipality,
+      location_text = excluded.location_text,
+      salary_min = excluded.salary_min,
+      salary_max = excluded.salary_max,
+      currency = excluded.currency,
+      schedule = excluded.schedule,
+      posted_at = excluded.posted_at,
+      expires_at = excluded.expires_at,
+      experience_level = excluded.experience_level,
+      education_level = excluded.education_level,
+      requirements = excluded.requirements,
+      skills = excluded.skills,
+      benefits = excluded.benefits,
+      source_url = excluded.source_url,
+      apply_url = excluded.apply_url,
+      status = excluded.status,
+      raw = excluded.raw,
+      content_hash = excluded.content_hash,
+      last_seen_at = now()
+    returning id, source, external_id, title, company, provider, status, source_url, updated_at
     `,
     values,
   );
@@ -1140,6 +1417,13 @@ function parseOptionalDate(value) {
 function normalizeCourseStatus(value) {
   const status = cleanText(value).toLowerCase();
   const allowedStatuses = ['active', 'inactive', 'archived', 'draft'];
+
+  return allowedStatuses.includes(status) ? status : 'active';
+}
+
+function normalizeJobStatus(value) {
+  const status = cleanText(value).toLowerCase();
+  const allowedStatuses = ['active', 'closed', 'inactive', 'archived', 'draft'];
 
   return allowedStatuses.includes(status) ? status : 'active';
 }

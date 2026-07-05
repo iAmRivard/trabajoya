@@ -52,7 +52,9 @@ GET  /api/intakes/:code
 POST /api/intakes/:code/verify
 POST /api/candidate-profiles
 POST /api/datasets/courses/upsert
+POST /api/datasets/jobs/upsert
 GET  /api/courses
+GET  /api/jobs
 GET  /api/intakes
 GET  /api/profiles
 ```
@@ -117,7 +119,33 @@ Documentacion:
 `POST /api/datasets/courses/upsert` requiere sesion admin o:
 
 ```http
-X-Trabajoya-Key: <TRABAJOYA_INTAKE_API_KEY>
+X-Trabajoya-Key: <TRABAJOYA_DATASET_API_KEY o TRABAJOYA_INTAKE_API_KEY>
+```
+
+## Datasets de empleos
+
+El MVP de empleos usa Exa + n8n para sincronizar vacantes hacia Postgres:
+
+```text
+n8n -> Exa /search -> POST /api/datasets/jobs/upsert -> public.job_vacancies
+```
+
+El workflow importable esta en:
+
+```text
+../contexto/n8n/trabajoya_jobs_exa_sync.json
+```
+
+Documentacion:
+
+```text
+../contexto/docs/datasets-empleos-exa-n8n.md
+```
+
+`POST /api/datasets/jobs/upsert` requiere sesion admin o:
+
+```http
+X-Trabajoya-Key: <TRABAJOYA_DATASET_API_KEY o TRABAJOYA_INTAKE_API_KEY>
 ```
 
 ## Prueba rapida de guardado

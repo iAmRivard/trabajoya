@@ -106,7 +106,7 @@
       "modified": 1783198829000,
       "created": 1783198829000,
       "name": "Datasets",
-      "description": "Sincronizacion de cursos y futuros catalogos.",
+      "description": "Sincronizacion de cursos, empleos y futuros catalogos.",
       "environment": {},
       "environmentPropertyOrder": null,
       "metaSortKey": -650,
@@ -433,6 +433,72 @@
       "headers": [],
       "authentication": {},
       "metaSortKey": -640,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_jobs_upsert",
+      "parentId": "fld_datasets",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/datasets/jobs/upsert",
+      "name": "Upsert empleo demo",
+      "description": "Prueba el endpoint que usara n8n para guardar vacantes.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"source\": \"insomnia_jobs_demo\",\n  \"sync\": {\n    \"provider\": \"QA Dataset\",\n    \"query\": \"empleo demo\",\n    \"ran_at\": \"2026-07-04T12:00:00.000Z\"\n  },\n  \"jobs\": [\n    {\n      \"source\": \"insomnia_jobs_demo\",\n      \"provider\": \"QA Dataset\",\n      \"title\": \"Asesor de ventas demo\",\n      \"company\": \"Empresa Demo\",\n      \"area\": \"Ventas y atencion al cliente\",\n      \"description\": \"Vacante de prueba para validar upsert de empleos.\",\n      \"employment_type\": \"tiempo completo\",\n      \"modality\": \"presencial\",\n      \"country\": \"El Salvador\",\n      \"department\": \"San Salvador\",\n      \"municipality\": \"San Salvador\",\n      \"location_text\": \"San Salvador, El Salvador\",\n      \"salary_min\": 450,\n      \"salary_max\": 600,\n      \"currency\": \"USD\",\n      \"schedule\": \"Diurno\",\n      \"expires_at\": \"2026-08-15\",\n      \"skills\": [\n        \"Ventas\",\n        \"Atencion al cliente\",\n        \"Comunicacion\"\n      ],\n      \"requirements\": [\n        \"Experiencia en ventas\",\n        \"Disponibilidad inmediata\"\n      ],\n      \"benefits\": [\n        \"Prestaciones de ley\"\n      ],\n      \"source_url\": \"https://example.com/empleo-demo\",\n      \"apply_url\": \"https://example.com/empleo-demo\",\n      \"status\": \"active\"\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "X-Trabajoya-Key",
+          "value": "{{ _.dataset_api_key }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -630,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_jobs_list",
+      "parentId": "fld_datasets",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/jobs",
+      "name": "Listar empleos admin",
+      "description": "Requiere login admin previo.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "50",
+          "disabled": false
+        },
+        {
+          "name": "source",
+          "value": "",
+          "disabled": true
+        },
+        {
+          "name": "q",
+          "value": "",
+          "disabled": true
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -620,
       "isPrivate": false,
       "settingStoreCookies": true,
       "settingSendCookies": true,
