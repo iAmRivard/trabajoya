@@ -27,7 +27,11 @@
         "dataset_api_key": "PEGAR_API_KEY_DATASETS_O_USAR_LA_MISMA",
         "intake_code": "PEGAR_CODIGO_GENERADO",
         "profile_id": "PEGAR_PROFILE_ID_ADMIN",
-        "candidate_phone": "77778888"
+        "candidate_phone": "77778888",
+        "interview_api_key": "PEGAR_TRABAJOYA_INTERVIEW_API_KEY",
+        "recommendation_run_id": "PEGAR_RECOMMENDATION_RUN_ID",
+        "job_id": "PEGAR_JOB_ID_RECOMENDADO",
+        "interview_session_id": "PEGAR_INTERVIEW_SESSION_ID"
       },
       "dataPropertyOrder": {
         "&": [
@@ -37,7 +41,11 @@
           "dataset_api_key",
           "intake_code",
           "profile_id",
-          "candidate_phone"
+          "candidate_phone",
+          "interview_api_key",
+          "recommendation_run_id",
+          "job_id",
+          "interview_session_id"
         ]
       },
       "color": null,
@@ -611,6 +619,114 @@
       "headers": [],
       "authentication": {},
       "metaSortKey": -620,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "fld_interviews",
+      "parentId": "wrk_trabajoya",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "name": "Entrevistas",
+      "description": "Simulacion de entrevista y guardado de feedback.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -660,
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_interview_create",
+      "parentId": "fld_interviews",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/interview-sessions",
+      "name": "Crear sesion de entrevista",
+      "description": "Crea una simulacion sobre una vacante recomendada para el codigo del candidato.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"job_id\": \"{{ _.job_id }}\",\n  \"recommendation_run_id\": \"{{ _.recommendation_run_id }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -660,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_interview_get",
+      "parentId": "fld_interviews",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/interview-sessions/{{ _.interview_session_id }}",
+      "name": "Ver sesion de entrevista",
+      "description": "Consulta estado y feedback de una simulacion.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -650,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_interview_latest",
+      "parentId": "fld_interviews",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/intakes/{{ _.intake_code }}/interview-sessions/latest",
+      "name": "Ultima entrevista por codigo",
+      "description": "Devuelve la ultima simulacion creada para el candidato.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -640,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "_type": "request"
+    },
+    {
+      "_id": "req_interview_feedback_save",
+      "parentId": "fld_interviews",
+      "modified": 1783198829000,
+      "created": 1783198829000,
+      "url": "{{ _.base_url }}/api/interview-feedback",
+      "name": "Guardar feedback backend",
+      "description": "Endpoint protegido que usa n8n para persistir el feedback final.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"interview_session_id\": \"{{ _.interview_session_id }}\",\n  \"elevenlabs_conversation_id\": \"conv_prueba\",\n  \"status\": \"completed\",\n  \"scores\": {\n    \"overall\": 82,\n    \"communication\": 80,\n    \"role_fit\": 85,\n    \"examples\": 75,\n    \"confidence\": 78,\n    \"clarity\": 84\n  },\n  \"feedback\": {\n    \"overall_score\": 82,\n    \"summary\": \"Respondio con buena claridad y conecto su experiencia con la vacante.\",\n    \"strengths\": [\"Explica con orden\", \"Menciona ejemplos concretos\"],\n    \"improvements\": [\"Preparar un cierre mas seguro\", \"Cuantificar logros cuando sea posible\"],\n    \"suggested_answers\": [\"Para preguntas de experiencia, usar situacion, accion y resultado.\"],\n    \"next_steps\": [\"Practicar una respuesta de 60 segundos sobre experiencia relevante\"],\n    \"closing_note\": \"Buena base para una entrevista inicial.\"\n  }\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "X-Trabajoya-Key",
+          "value": "{{ _.interview_api_key }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -630,
       "isPrivate": false,
       "settingStoreCookies": true,
       "settingSendCookies": true,

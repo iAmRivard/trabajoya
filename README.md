@@ -17,12 +17,14 @@ docker-compose.yml       Compose para deploy en Dokploy desde GitHub
 1. Un operador crea un registro inicial con telefono y datos basicos.
 2. Opcionalmente se incluye texto de CV o perfil previo en `cv_text`.
 3. El backend genera un codigo corto y una URL publica.
-4. El candidato abre la URL, verifica su telefono y arranca la conversacion.
+4. El candidato abre la URL y arranca la conversacion sin volver a confirmar telefono.
 5. El agente recibe el contexto del registro y el CV previo, si existe.
 6. El tool de ElevenLabs guarda el perfil final en Postgres y lo enlaza al
    registro inicial.
 7. Con el perfil confirmado, el backend puede buscar cursos y empleos en vivo
    con Exa y usar OpenAI para rankear recomendaciones reales.
+8. El candidato puede practicar una entrevista corta sobre una vacante
+   recomendada; el feedback queda guardado en Postgres.
 
 ## Desarrollo local
 
@@ -52,6 +54,8 @@ TRABAJOYA_SESSION_SECRET=...
 TRABAJOYA_INTAKE_API_KEY=...
 EXA_API_KEY=...
 OPENAI_API_KEY=...
+ELEVENLABS_INTERVIEW_AGENT_ID=...
+TRABAJOYA_INTERVIEW_API_KEY=...
 ```
 
 El compose espera que existan estas redes externas en el VPS:
@@ -128,6 +132,36 @@ GET  /api/profiles/:profileId/recommendations
 El endpoint guarda historial en `public.candidate_recommendation_runs`. Si se
 repite una solicitud dentro de `MATCH_MIN_INTERVAL_SECONDS`, devuelve la ultima
 corrida con `cached: true`.
+
+## API Entrevistas
+
+Crear una practica sobre una vacante recomendada:
+
+```http
+POST /api/intakes/:code/interview-sessions
+Content-Type: application/json
+```
+
+```json
+{
+  "job_id": "uuid",
+  "recommendation_run_id": "uuid"
+}
+```
+
+Consultar feedback:
+
+```http
+GET /api/intakes/:code/interview-sessions/:sessionId
+GET /api/intakes/:code/interview-sessions/latest
+```
+
+El webhook de n8n para guardar feedback llama:
+
+```http
+POST /api/interview-feedback
+X-Trabajoya-Key: <TRABAJOYA_INTERVIEW_API_KEY>
+```
 
 ## Insomnia
 

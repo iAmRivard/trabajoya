@@ -11,6 +11,7 @@
     "migrate": "node scripts/migrate.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server/index.mjs",
+    "create:interview-agent": "node scripts/create-interview-agent.mjs",
     "test:webhook": "node scripts/post-test-profile.mjs"
   },
   "dependencies": {

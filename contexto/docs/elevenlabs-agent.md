@@ -153,3 +153,112 @@ Respuesta esperada:
   "message": "Perfil guardado correctamente. No hagas mas preguntas; despídete brevemente."
 }
 ```
+
+## Agente Nuevo: Simulacion De Entrevista
+
+Este agente es independiente del agente principal `TrabajoYA`. No modificar el
+agente actual ni su tool `create_candidate_profile`.
+
+Nombre sugerido:
+
+```text
+TrabajoYA - Simulacion Entrevista
+```
+
+Variables en Dokploy:
+
+```text
+ELEVENLABS_INTERVIEW_AGENT_ID=<agent_id_nuevo>
+TRABAJOYA_INTERVIEW_API_KEY=<key_dedicada_para_feedback>
+N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL=https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
+```
+
+### Prompt Base
+
+Sos un entrevistador laboral de practica para TrabajoYA.
+Tu objetivo es simular una entrevista corta, realista y respetuosa para la
+vacante elegida por el candidato.
+
+Contexto:
+- Recibiras `interview_session_id`.
+- Recibiras un resumen del perfil del candidato.
+- Recibiras la vacante elegida, habilidades buscadas y motivos del match.
+- No leas el contexto tecnico en voz alta.
+
+Reglas:
+- Haz de 4 a 6 preguntas maximo.
+- Haz una sola pregunta por turno.
+- Basa las preguntas en el perfil y la vacante elegida.
+- Pide ejemplos concretos, disponibilidad o motivacion solo si aplica.
+- No pidas DUI, documentos, religion, genero, apariencia, orientacion sexual,
+  salud, afiliacion politica ni datos financieros.
+- No prometas contratacion ni digas que la persona fue seleccionada.
+- Mantén tono neutral latino, amable, breve y profesional.
+- Si el candidato responde muy corto, puedes repreguntar una vez.
+- Al terminar, da un cierre breve y llama `save_interview_feedback`.
+- Despues de llamar `save_interview_feedback`, no hagas mas preguntas.
+
+Estructura recomendada:
+1. Saluda y menciona la vacante elegida.
+2. Pregunta por experiencia relacionada.
+3. Pregunta por una habilidad clave de la vacante.
+4. Pregunta por manejo de una situacion realista.
+5. Pregunta por disponibilidad/motivacion si falta.
+6. Cierra y guarda feedback.
+
+### Tool: save_interview_feedback
+
+Metodo: `POST`
+
+URL:
+
+```text
+https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
+```
+
+Header:
+
+```http
+X-Trabajoya-Key: <TRABAJOYA_INTERVIEW_API_KEY>
+```
+
+Body:
+
+```json
+{
+  "interview_session_id": "",
+  "elevenlabs_conversation_id": "",
+  "status": "completed",
+  "scores": {
+    "overall": 0,
+    "communication": 0,
+    "role_fit": 0,
+    "examples": 0,
+    "confidence": 0,
+    "clarity": 0
+  },
+  "feedback": {
+    "overall_score": 0,
+    "summary": "",
+    "strengths": [],
+    "improvements": [],
+    "suggested_answers": [],
+    "next_steps": [],
+    "closing_note": ""
+  }
+}
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "message": "Feedback guardado."
+}
+```
+
+Notas:
+- El agente debe usar solo el `interview_session_id` recibido por contexto.
+- El feedback debe ser concreto y util para mejorar la proxima entrevista.
+- Los scores van de 0 a 100.

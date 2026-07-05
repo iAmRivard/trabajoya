@@ -55,6 +55,10 @@ POST /api/datasets/courses/upsert
 POST /api/datasets/jobs/upsert
 POST /api/intakes/:code/recommendations
 GET  /api/intakes/:code/recommendations/latest
+POST /api/intakes/:code/interview-sessions
+GET  /api/intakes/:code/interview-sessions/latest
+GET  /api/intakes/:code/interview-sessions/:sessionId
+POST /api/interview-feedback
 POST /api/profiles/:profileId/recommendations
 GET  /api/profiles/:profileId/recommendations
 GET  /api/courses
@@ -175,6 +179,89 @@ a paginas crawleadas recientemente, recargan contenido fresco de Exa y filtran
 textos que indiquen oferta expirada, cerrada o con fecha limite pasada. Si se
 necesitan mas resultados se puede subir `EXA_JOB_FRESH_DAYS`; si salen muchas
 vacantes viejas conviene bajarlo.
+
+## Simulacion de entrevista
+
+Despues de generar recomendaciones, el candidato puede practicar una entrevista
+corta sobre una vacante recomendada. El frontend crea una sesion, inicia el
+agente de ElevenLabs de simulacion y luego consulta el feedback guardado.
+
+Crear sesion:
+
+```http
+POST /api/intakes/:code/interview-sessions
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "job_id": "uuid",
+  "recommendation_run_id": "uuid"
+}
+```
+
+Respuesta:
+
+```json
+{
+  "ok": true,
+  "session_id": "uuid",
+  "agent_id": "agent_xxx",
+  "context": {
+    "interview_session_id": "uuid",
+    "profile_summary": "Resumen para el agente",
+    "job_summary": "Vacante elegida"
+  }
+}
+```
+
+Consultar feedback:
+
+```http
+GET /api/intakes/:code/interview-sessions/:sessionId
+GET /api/intakes/:code/interview-sessions/latest
+```
+
+Guardar feedback desde n8n:
+
+```http
+POST /api/interview-feedback
+X-Trabajoya-Key: <TRABAJOYA_INTERVIEW_API_KEY>
+Content-Type: application/json
+```
+
+El agente de entrevista llama el webhook n8n:
+
+```text
+POST https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
+```
+
+Para crear o actualizar el agente de ElevenLabs desde API:
+
+```bash
+ELEVENLABS_API_KEY=... \
+TRABAJOYA_INTERVIEW_API_KEY=... \
+N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL=https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback \
+npm run create:interview-agent
+```
+
+El script duplica el agente principal si no se pasa `ELEVENLABS_INTERVIEW_AGENT_ID`.
+Si ya existe un agente de entrevista, pasar ese ID para actualizar prompt/tool sin
+crear otro:
+
+```bash
+ELEVENLABS_INTERVIEW_AGENT_ID=agent_xxx npm run create:interview-agent
+```
+
+Variables requeridas:
+
+```text
+ELEVENLABS_INTERVIEW_AGENT_ID=...
+TRABAJOYA_INTERVIEW_API_KEY=...
+N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL=https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback
+```
 
 ## Datasets de cursos
 

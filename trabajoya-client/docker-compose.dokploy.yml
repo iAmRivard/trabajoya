@@ -26,6 +26,9 @@ services:
       MATCH_MAX_RESULTS_PER_TYPE: ${MATCH_MAX_RESULTS_PER_TYPE:-5}
       EXA_JOB_FRESH_DAYS: ${EXA_JOB_FRESH_DAYS:-45}
       EXA_JOB_MAX_AGE_HOURS: ${EXA_JOB_MAX_AGE_HOURS:-6}
+      ELEVENLABS_INTERVIEW_AGENT_ID: ${ELEVENLABS_INTERVIEW_AGENT_ID:-}
+      TRABAJOYA_INTERVIEW_API_KEY: ${TRABAJOYA_INTERVIEW_API_KEY:-}
+      N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL: ${N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL:-https://n8n.rivasystems.dev/webhook/trabajoya/save-interview-feedback}
     labels:
       traefik.enable: "true"
       traefik.http.routers.trabajoya-web.entrypoints: web

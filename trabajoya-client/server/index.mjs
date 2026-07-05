@@ -354,6 +354,194 @@ app.get('/api/intakes/:code/recommendations/latest', async (request, response) =
   }
 });
 
+app.post('/api/intakes/:code/interview-sessions', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const jobId = normalizeUuid(request.body.job_id || request.body.jobId);
+    const recommendationRunId = normalizeOptionalUuid(
+      request.body.recommendation_run_id || request.body.recommendationRunId,
+    );
+    const agentId = getInterviewAgentId();
+
+    if (!agentId) {
+      throw new Error('missing_interview_agent_id');
+    }
+
+    const { intake, profile } = await findIntakeProfileByCode(db, code);
+
+    if (!intake) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    if (!profile) {
+      response.status(409).json({
+        ok: false,
+        error: 'Este registro aun no tiene un perfil confirmado.',
+      });
+      return;
+    }
+
+    const recommendedJob = await findRecommendedJobForInterview(db, {
+      intakeId: intake.id,
+      jobId,
+      recommendationRunId,
+    });
+
+    if (!recommendedJob) {
+      response.status(409).json({
+        ok: false,
+        error: 'La vacante enviada no pertenece a las recomendaciones de este perfil.',
+      });
+      return;
+    }
+
+    const profileSnapshot = buildInterviewProfileSnapshot(profile, intake);
+    const selectedJob = buildSelectedInterviewJob(recommendedJob);
+    const session = await insertInterviewSession(db, {
+      intakeId: intake.id,
+      profileId: profile.id,
+      recommendationRunId: recommendedJob.run.id,
+      jobVacancyId: selectedJob.job_id,
+      selectedJob,
+      profileSnapshot,
+      agentId,
+    });
+
+    response.status(201).json({
+      ok: true,
+      session: serializeInterviewSession(session),
+      session_id: session.id,
+      agent_id: agentId,
+      context: buildInterviewAgentContext({
+        session,
+        intake,
+        profileSnapshot,
+        selectedJob,
+      }),
+    });
+  } catch (error) {
+    response.status(getInterviewErrorStatus(error)).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/intakes/:code/interview-sessions/latest', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const { intake, profile } = await findIntakeProfileByCode(db, code);
+
+    if (!intake) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    if (!profile) {
+      response.status(409).json({
+        ok: false,
+        error: 'Este registro aun no tiene un perfil confirmado.',
+      });
+      return;
+    }
+
+    const session = await findLatestInterviewSessionForIntake(db, intake.id);
+
+    if (!session) {
+      response.status(404).json({
+        ok: false,
+        error: 'Aun no hay simulaciones de entrevista para este perfil.',
+      });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      session: serializeInterviewSession(session),
+    });
+  } catch (error) {
+    response.status(getInterviewErrorStatus(error)).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.get('/api/intakes/:code/interview-sessions/:sessionId', async (request, response) => {
+  try {
+    const db = getPool();
+    const code = normalizeCode(request.params.code);
+    const sessionId = normalizeUuid(request.params.sessionId);
+    const { intake, profile } = await findIntakeProfileByCode(db, code);
+
+    if (!intake) {
+      response.status(404).json({
+        ok: false,
+        error: 'Codigo no encontrado.',
+      });
+      return;
+    }
+
+    if (!profile) {
+      response.status(409).json({
+        ok: false,
+        error: 'Este registro aun no tiene un perfil confirmado.',
+      });
+      return;
+    }
+
+    const session = await findInterviewSessionForIntake(db, {
+      intakeId: intake.id,
+      sessionId,
+    });
+
+    if (!session) {
+      response.status(404).json({
+        ok: false,
+        error: 'Simulacion no encontrada para este codigo.',
+      });
+      return;
+    }
+
+    response.json({
+      ok: true,
+      session: serializeInterviewSession(session),
+    });
+  } catch (error) {
+    response.status(getInterviewErrorStatus(error)).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
+app.post('/api/interview-feedback', requireInterviewFeedbackWriter, async (request, response) => {
+  try {
+    const db = getPool();
+    const saved = await saveInterviewFeedback(db, request.body);
+
+    response.json({
+      ok: true,
+      message: 'Feedback guardado.',
+      session: serializeInterviewSession(saved),
+    });
+  } catch (error) {
+    response.status(getInterviewErrorStatus(error)).json({
+      ok: false,
+      error: getPublicError(error),
+    });
+  }
+});
+
 app.post('/api/profiles/:profileId/recommendations', requireAdminSession, async (request, response) => {
   try {
     const db = getPool();
@@ -1121,6 +1309,337 @@ function serializeRecommendationRunListItem(run) {
     updated_at: run.updated_at,
     error: run.error || '',
     result: run.status === 'success' ? run.result : null,
+  };
+}
+
+async function findRecommendedJobForInterview(db, { intakeId, jobId, recommendationRunId }) {
+  const values = [intakeId];
+  const filters = ['intake_id = $1', "status = 'success'"];
+
+  if (recommendationRunId) {
+    values.push(recommendationRunId);
+    filters.push(`id = $${values.length}`);
+  }
+
+  const result = await db.query(
+    `
+    select *
+    from public.candidate_recommendation_runs
+    where ${filters.join(' and ')}
+    order by created_at desc
+    limit ${recommendationRunId ? 1 : 12}
+    `,
+    values,
+  );
+
+  for (const run of result.rows) {
+    const recommended = getRecommendedJobFromRun(run, jobId);
+
+    if (!recommended) continue;
+
+    const vacancy = await findJobVacancyById(db, jobId);
+
+    return {
+      run,
+      recommendation: recommended.recommendation,
+      candidate: recommended.candidate,
+      vacancy,
+    };
+  }
+
+  return null;
+}
+
+function getRecommendedJobFromRun(run, jobId) {
+  const result = run.result && typeof run.result === 'object' ? run.result : {};
+  const candidates = run.candidates && typeof run.candidates === 'object' ? run.candidates : {};
+  const recommendedJobs = Array.isArray(result.recommendations?.jobs) ? result.recommendations.jobs : [];
+  const candidateJobs = Array.isArray(candidates.jobs) ? candidates.jobs : [];
+  const recommendation = recommendedJobs.find((job) => cleanText(job.job_id) === jobId);
+
+  if (!recommendation) return null;
+
+  return {
+    recommendation,
+    candidate: candidateJobs.find((job) => cleanText(job.id) === jobId) || null,
+  };
+}
+
+async function findJobVacancyById(db, jobId) {
+  const result = await db.query(
+    `
+    select *
+    from public.job_vacancies
+    where id = $1
+    limit 1
+    `,
+    [jobId],
+  );
+
+  return result.rows[0] || null;
+}
+
+function buildSelectedInterviewJob(recommendedJob) {
+  const source = {
+    ...(recommendedJob.candidate || {}),
+    ...(recommendedJob.vacancy || {}),
+    ...(recommendedJob.recommendation || {}),
+  };
+  const score = normalizeRecommendationScore(recommendedJob.recommendation?.score, recommendedJob.candidate?.pre_score);
+
+  return pruneUndefined({
+    job_id: cleanText(source.id || source.job_id),
+    title: cleanText(source.title) || 'Vacante recomendada',
+    company: cleanText(source.company),
+    provider: cleanText(source.provider || source.source),
+    area: cleanText(source.area),
+    description: limitChars(source.description, 1300),
+    employment_type: cleanText(source.employment_type),
+    modality: cleanText(source.modality),
+    location_text: cleanText(source.location_text || [source.municipality, source.department].filter(Boolean).join(', ')),
+    department: cleanText(source.department),
+    municipality: cleanText(source.municipality),
+    salary_min: source.salary_min || null,
+    salary_max: source.salary_max || null,
+    currency: cleanText(source.currency) || 'USD',
+    schedule: cleanText(source.schedule),
+    requirements: normalizeTextArray(source.requirements).slice(0, 8),
+    skills: normalizeTextArray(source.skills).slice(0, 12),
+    source_url: cleanText(source.source_url),
+    apply_url: cleanText(source.apply_url || source.source_url),
+    score,
+    fit_level: cleanText(recommendedJob.recommendation?.fit_level) || fitLevelFromScore(score),
+    reasons: normalizeTextArray(recommendedJob.recommendation?.reasons).slice(0, 4),
+    concerns: normalizeTextArray(recommendedJob.recommendation?.concerns).slice(0, 4),
+    next_step: cleanText(recommendedJob.recommendation?.next_step),
+  });
+}
+
+function buildInterviewProfileSnapshot(profileRow, intake = null) {
+  const snapshot = buildRecommendationProfileSnapshot(profileRow, intake);
+
+  return {
+    ...snapshot,
+    full_name: snapshot.full_name || cleanText(intake?.full_name),
+    contact_visibility: 'No pedir telefono ni documentos sensibles durante la simulacion.',
+  };
+}
+
+async function insertInterviewSession(
+  db,
+  { intakeId, profileId, recommendationRunId, jobVacancyId, selectedJob, profileSnapshot, agentId },
+) {
+  const result = await db.query(
+    `
+    insert into public.candidate_interview_simulations (
+      intake_id,
+      profile_id,
+      recommendation_run_id,
+      job_vacancy_id,
+      selected_job,
+      profile_snapshot,
+      agent_id,
+      status
+    )
+    values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, 'started')
+    returning *
+    `,
+    [
+      intakeId,
+      profileId,
+      recommendationRunId,
+      jobVacancyId,
+      stringifyPostgresJson(selectedJob || {}),
+      stringifyPostgresJson(profileSnapshot || {}),
+      agentId,
+    ],
+  );
+
+  return result.rows[0];
+}
+
+async function findInterviewSessionForIntake(db, { intakeId, sessionId }) {
+  const result = await db.query(
+    `
+    select *
+    from public.candidate_interview_simulations
+    where intake_id = $1 and id = $2
+    limit 1
+    `,
+    [intakeId, sessionId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function findLatestInterviewSessionForIntake(db, intakeId) {
+  const result = await db.query(
+    `
+    select *
+    from public.candidate_interview_simulations
+    where intake_id = $1
+    order by created_at desc
+    limit 1
+    `,
+    [intakeId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function saveInterviewFeedback(db, body) {
+  const payload = body?.parameters && typeof body.parameters === 'object' ? body.parameters : body;
+  const sessionId = normalizeUuid(
+    payload.interview_session_id || payload.interviewSessionId || payload.session_id || payload.sessionId,
+  );
+  const feedback = normalizeInterviewFeedback(payload.feedback || payload);
+  const scores = normalizeInterviewScores(payload.scores || payload.feedback?.scores || payload);
+  const status = cleanText(payload.status) === 'failed' ? 'failed' : 'completed';
+  const conversationId = cleanText(
+    payload.elevenlabs_conversation_id ||
+      payload.elevenLabsConversationId ||
+      payload.conversation_id ||
+      payload.conversationId ||
+      body.conversation_id ||
+      body.conversationId,
+  );
+  const result = await db.query(
+    `
+    update public.candidate_interview_simulations
+    set
+      status = $2,
+      feedback = $3::jsonb,
+      scores = $4::jsonb,
+      elevenlabs_conversation_id = coalesce(nullif($5, ''), elevenlabs_conversation_id),
+      completed_at = case when $2 = 'completed' then coalesce(completed_at, now()) else completed_at end
+    where id = $1
+    returning *
+    `,
+    [
+      sessionId,
+      status,
+      stringifyPostgresJson(feedback),
+      stringifyPostgresJson(scores),
+      conversationId,
+    ],
+  );
+
+  if (result.rowCount === 0) {
+    throw new Error('unknown_interview_session');
+  }
+
+  return result.rows[0];
+}
+
+function normalizeInterviewFeedback(value) {
+  const feedback = value && typeof value === 'object' ? value : {};
+
+  return pruneUndefined({
+    overall_score: normalizeRecommendationScore(
+      feedback.overall_score ?? feedback.overallScore ?? feedback.score ?? feedback.scores?.overall,
+      0,
+    ),
+    summary: limitChars(cleanText(feedback.summary || feedback.resumen || feedback.feedback_summary), 900),
+    strengths: normalizeTextArray(feedback.strengths || feedback.fortalezas).slice(0, 5),
+    improvements: normalizeTextArray(
+      feedback.improvements || feedback.areas_to_improve || feedback.mejoras || feedback.oportunidades,
+    ).slice(0, 5),
+    suggested_answers: normalizeTextArray(
+      feedback.suggested_answers || feedback.respuestas_sugeridas || feedback.answer_tips,
+    ).slice(0, 5),
+    next_steps: normalizeTextArray(feedback.next_steps || feedback.proximos_pasos || feedback.recommendations).slice(0, 5),
+    closing_note: limitChars(cleanText(feedback.closing_note || feedback.nota_final), 500),
+  });
+}
+
+function normalizeInterviewScores(value) {
+  const scores = value && typeof value === 'object' ? value : {};
+
+  return pruneUndefined({
+    overall: normalizeRecommendationScore(scores.overall ?? scores.overall_score ?? scores.score, 0),
+    communication: normalizeOptionalScore(scores.communication ?? scores.comunicacion),
+    role_fit: normalizeOptionalScore(scores.role_fit ?? scores.fit ?? scores.ajuste_puesto),
+    examples: normalizeOptionalScore(scores.examples ?? scores.ejemplos),
+    confidence: normalizeOptionalScore(scores.confidence ?? scores.confianza),
+    clarity: normalizeOptionalScore(scores.clarity ?? scores.claridad),
+  });
+}
+
+function normalizeOptionalScore(value) {
+  if (value === null || value === undefined || value === '') return null;
+  return normalizeRecommendationScore(value, 0);
+}
+
+function buildInterviewAgentContext({ session, intake, profileSnapshot, selectedJob }) {
+  const profileSummary = [
+    profileSnapshot.full_name ? `Nombre: ${profileSnapshot.full_name}` : '',
+    profileSnapshot.professional_summary ? `Resumen: ${profileSnapshot.professional_summary}` : '',
+    profileSnapshot.desired_roles?.length ? `Roles objetivo: ${profileSnapshot.desired_roles.join(', ')}` : '',
+    profileSnapshot.experience?.length ? `Experiencia: ${profileSnapshot.experience.join(' | ')}` : '',
+    profileSnapshot.informal_experience?.length
+      ? `Experiencia informal: ${profileSnapshot.informal_experience.join(' | ')}`
+      : '',
+    profileSnapshot.skills?.technical?.length ? `Habilidades tecnicas: ${profileSnapshot.skills.technical.join(', ')}` : '',
+    profileSnapshot.skills?.soft?.length ? `Habilidades blandas: ${profileSnapshot.skills.soft.join(', ')}` : '',
+    profileSnapshot.availability ? `Disponibilidad: ${profileSnapshot.availability}` : '',
+    profileSnapshot.location?.department || profileSnapshot.location?.municipality
+      ? `Ubicacion: ${[profileSnapshot.location.municipality, profileSnapshot.location.department].filter(Boolean).join(', ')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const jobSummary = [
+    `Vacante: ${selectedJob.title}`,
+    selectedJob.company ? `Empresa: ${selectedJob.company}` : '',
+    selectedJob.location_text ? `Lugar: ${selectedJob.location_text}` : '',
+    selectedJob.modality ? `Modalidad: ${selectedJob.modality}` : '',
+    selectedJob.employment_type ? `Tipo: ${selectedJob.employment_type}` : '',
+    selectedJob.skills?.length ? `Habilidades buscadas: ${selectedJob.skills.join(', ')}` : '',
+    selectedJob.description ? `Descripcion: ${selectedJob.description}` : '',
+    selectedJob.reasons?.length ? `Motivos del match: ${selectedJob.reasons.join(' | ')}` : '',
+    selectedJob.concerns?.length ? `Puntos a cuidar: ${selectedJob.concerns.join(' | ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    interview_session_id: session.id,
+    intake_code: intake.code,
+    profile_summary: profileSummary,
+    selected_job: selectedJob,
+    job_summary: jobSummary,
+    instructions: [
+      'Simula una entrevista corta como empleador para la vacante elegida.',
+      'Haz 4 a 6 preguntas maximo, una pregunta por turno.',
+      'No pidas DUI, documentos, datos de salud, religion, politica, apariencia, genero, orientacion sexual ni finanzas.',
+      'No prometas contratacion.',
+      'Al terminar, llama la herramienta save_interview_feedback con feedback estructurado.',
+    ].join(' '),
+  };
+}
+
+function serializeInterviewSession(session) {
+  const selectedJob = session.selected_job && typeof session.selected_job === 'object' ? session.selected_job : {};
+  const feedback = session.feedback && typeof session.feedback === 'object' ? session.feedback : {};
+  const scores = session.scores && typeof session.scores === 'object' ? session.scores : {};
+
+  return {
+    id: session.id,
+    session_id: session.id,
+    intake_id: session.intake_id,
+    profile_id: session.profile_id,
+    recommendation_run_id: session.recommendation_run_id,
+    job_vacancy_id: session.job_vacancy_id,
+    selected_job: selectedJob,
+    agent_id: session.agent_id || '',
+    elevenlabs_conversation_id: session.elevenlabs_conversation_id || '',
+    status: session.status,
+    feedback,
+    scores,
+    completed_at: session.completed_at,
+    created_at: session.created_at,
+    updated_at: session.updated_at,
   };
 }
 
@@ -2239,6 +2758,17 @@ function getRecommendationErrorStatus(error) {
   return 400;
 }
 
+function getInterviewErrorStatus(error) {
+  if (['missing_interview_agent_id', 'missing_interview_api_key', 'missing_db_password'].includes(error?.message)) {
+    return 503;
+  }
+
+  if (error?.message === 'unknown_interview_session') return 404;
+  if (error?.message === 'invalid_uuid') return 400;
+
+  return 400;
+}
+
 function getCoursePayloads(body) {
   if (Array.isArray(body)) return body;
   if (Array.isArray(body?.courses)) return body.courses;
@@ -2636,6 +3166,26 @@ function requireDatasetWriter(request, response, next) {
   });
 }
 
+function requireInterviewFeedbackWriter(request, response, next) {
+  if (!getInterviewApiKey()) {
+    response.status(503).json({
+      ok: false,
+      error: getPublicError(new Error('missing_interview_api_key')),
+    });
+    return;
+  }
+
+  if (isAdminRequest(request) || hasValidInterviewApiKey(request)) {
+    next();
+    return;
+  }
+
+  response.status(401).json({
+    ok: false,
+    error: 'API key requerida para guardar feedback de entrevista.',
+  });
+}
+
 function isAdminAuthConfigured() {
   return Boolean(getAdminPassword() && getSessionSecret());
 }
@@ -2654,6 +3204,13 @@ function hasValidIntakeApiKey(request) {
 
 function hasValidDatasetApiKey(request) {
   const expectedKey = getDatasetApiKey();
+  const providedKey = getApiKeyFromRequest(request);
+
+  return Boolean(expectedKey && providedKey && timingSafeTextEqual(providedKey, expectedKey));
+}
+
+function hasValidInterviewApiKey(request) {
+  const expectedKey = getInterviewApiKey();
   const providedKey = getApiKeyFromRequest(request);
 
   return Boolean(expectedKey && providedKey && timingSafeTextEqual(providedKey, expectedKey));
@@ -2703,6 +3260,18 @@ function getOpenAiApiKey() {
 
 function getOpenAiMatchModel() {
   return cleanText(process.env.OPENAI_MATCH_MODEL) || 'gpt-5.4-mini';
+}
+
+function getInterviewAgentId() {
+  return cleanText(process.env.ELEVENLABS_INTERVIEW_AGENT_ID);
+}
+
+function getInterviewApiKey() {
+  return cleanText(process.env.TRABAJOYA_INTERVIEW_API_KEY || process.env.INTERVIEW_API_KEY);
+}
+
+function getInterviewFeedbackWebhookUrl() {
+  return cleanText(process.env.N8N_INTERVIEW_FEEDBACK_WEBHOOK_URL);
 }
 
 function setAdminSessionCookie(response) {
@@ -2852,6 +3421,18 @@ function getPublicError(error) {
     return 'Configura OPENAI_API_KEY en Dokploy para generar el match del perfil.';
   }
 
+  if (error?.message === 'missing_interview_agent_id') {
+    return 'Configura ELEVENLABS_INTERVIEW_AGENT_ID en Dokploy para iniciar simulaciones de entrevista.';
+  }
+
+  if (error?.message === 'missing_interview_api_key') {
+    return 'Configura TRABAJOYA_INTERVIEW_API_KEY en Dokploy para guardar feedback de entrevista.';
+  }
+
+  if (error?.message === 'unknown_interview_session') {
+    return 'La simulacion de entrevista no existe.';
+  }
+
   if (error?.message === 'exa_request_failed') {
     return 'Exa no pudo completar la busqueda en vivo.';
   }
@@ -2933,6 +3514,14 @@ function normalizeUuid(value) {
   }
 
   return id;
+}
+
+function normalizeOptionalUuid(value) {
+  const id = cleanText(value);
+
+  if (!id) return null;
+
+  return normalizeUuid(id);
 }
 
 function normalizePhoneSV(value) {

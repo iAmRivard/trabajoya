@@ -118,6 +118,45 @@
           <p id="recommendationsStatus" class="recommendations-status">Sin cargar</p>
           <div id="recommendationsMeta" class="recommendations-meta" hidden></div>
 
+          <section id="interviewPanel" class="interview-panel" aria-label="Simulacion de entrevista" hidden>
+            <div class="interview-header">
+              <div>
+                <p class="eyebrow">Practica corta</p>
+                <h3 id="interviewTitle">Simulacion de entrevista</h3>
+                <p id="interviewDetail">Elegí una vacante recomendada para practicar con un entrevistador de voz.</p>
+              </div>
+              <button id="backToRecommendationsButton" type="button">
+                <i data-lucide="arrow-left"></i>
+                <span>Opciones</span>
+              </button>
+            </div>
+
+            <div class="interview-job" id="interviewJobSummary"></div>
+
+            <div class="interview-controls" aria-label="Controles de practica">
+              <button id="startInterviewButton" class="primary-action" type="button" disabled>
+                <i data-lucide="play"></i>
+                <span>Iniciar práctica</span>
+              </button>
+              <button id="stopInterviewButton" type="button" disabled>
+                <i data-lucide="square"></i>
+                <span>Detener</span>
+              </button>
+              <button id="muteInterviewButton" type="button" disabled aria-pressed="false">
+                <i data-lucide="mic"></i>
+                <span>Micrófono</span>
+              </button>
+              <button id="retryInterviewButton" type="button" hidden>
+                <i data-lucide="refresh-cw"></i>
+                <span>Repetir</span>
+              </button>
+            </div>
+
+            <p id="interviewStatus" class="interview-status">Sin iniciar.</p>
+
+            <section id="interviewFeedback" class="interview-feedback" aria-label="Feedback de entrevista" hidden></section>
+          </section>
+
           <div class="recommendations-grid">
             <section class="recommendation-column" aria-labelledby="jobsTitle">
               <div class="recommendation-column-title">

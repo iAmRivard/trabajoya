@@ -92,3 +92,53 @@ conversation_summary = conversation_summary
   "message": "Perfil guardado. El siguiente paso es revisar recomendaciones de empleo."
 }
 ```
+
+## Webhook De Feedback De Entrevista
+
+Webhook nuevo, independiente del guardado de perfil:
+
+```text
+POST /webhook/trabajoya/save-interview-feedback
+```
+
+Header requerido:
+
+```http
+X-Trabajoya-Key: <TRABAJOYA_INTERVIEW_API_KEY>
+```
+
+Payload esperado desde ElevenLabs:
+
+```json
+{
+  "interview_session_id": "uuid",
+  "elevenlabs_conversation_id": "conv_xxx",
+  "status": "completed",
+  "scores": {
+    "overall": 82,
+    "communication": 80,
+    "role_fit": 85,
+    "examples": 75,
+    "confidence": 78,
+    "clarity": 84
+  },
+  "feedback": {
+    "overall_score": 82,
+    "summary": "Resumen breve del desempeno.",
+    "strengths": ["Fortaleza concreta"],
+    "improvements": ["Mejora concreta"],
+    "suggested_answers": ["Como responder mejor una pregunta clave."],
+    "next_steps": ["Practicar una respuesta de 60 segundos"],
+    "closing_note": "Cierre breve."
+  }
+}
+```
+
+Workflow:
+
+1. Webhook recibe el payload.
+2. Code node valida `X-Trabajoya-Key` y `interview_session_id`.
+3. HTTP Request llama `POST /api/interview-feedback` en TrabajoYA con la misma
+   key.
+4. El backend actualiza `public.candidate_interview_simulations`.
+5. Respond to Webhook devuelve `{ "ok": true, "message": "Feedback guardado." }`.

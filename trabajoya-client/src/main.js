@@ -51,6 +51,17 @@ const elements = {
   recommendationsGaps: document.querySelector('#recommendationsGaps'),
   refreshRecommendationsButton: document.querySelector('#refreshRecommendationsButton'),
   backToProfileButton: document.querySelector('#backToProfileButton'),
+  interviewPanel: document.querySelector('#interviewPanel'),
+  interviewTitle: document.querySelector('#interviewTitle'),
+  interviewDetail: document.querySelector('#interviewDetail'),
+  interviewJobSummary: document.querySelector('#interviewJobSummary'),
+  startInterviewButton: document.querySelector('#startInterviewButton'),
+  stopInterviewButton: document.querySelector('#stopInterviewButton'),
+  muteInterviewButton: document.querySelector('#muteInterviewButton'),
+  retryInterviewButton: document.querySelector('#retryInterviewButton'),
+  backToRecommendationsButton: document.querySelector('#backToRecommendationsButton'),
+  interviewStatus: document.querySelector('#interviewStatus'),
+  interviewFeedback: document.querySelector('#interviewFeedback'),
   cvForm: document.querySelector('#cvForm'),
   cvInput: document.querySelector('#cvInput'),
   extractCvButton: document.querySelector('#extractCvButton'),
@@ -111,6 +122,10 @@ let candidateFinalAgentMessageAt = 0;
 let candidateAgentSpeaking = false;
 let candidateRecommendations = null;
 let recommendationsLoading = false;
+let conversationMode = null;
+let activeInterview = null;
+let interviewLoading = false;
+let interviewFeedbackTimer = null;
 
 function getErrorMessage(error, fallback) {
   if (typeof error === 'string') return error;
@@ -165,7 +180,7 @@ function addEvent(kind, text) {
 }
 
 function setConnectedState(isConnected) {
-  elements.startButton.disabled = isConnected || !canStartConversation();
+  elements.startButton.disabled = isConnected || !canStartConversation() || Boolean(activeInterview);
   elements.stopButton.disabled = !isConnected;
   elements.muteButton.disabled = !isConnected;
   elements.textInput.disabled = !isConnected;
@@ -190,6 +205,7 @@ function setConnectedState(isConnected) {
   }
 
   updateCandidateRecommendationsButton();
+  updateInterviewControls();
 }
 
 function canStartConversation() {
@@ -250,6 +266,9 @@ function setCandidateRecommendationsView(active) {
   if (!candidateSession) return;
 
   document.body.classList.toggle('recommendations-mode', active);
+  if (!active && activeInterview && !conversation) {
+    clearInterviewPanel();
+  }
   elements.recommendationsPanel.hidden = !active;
   elements.continueRecommendationsButton.hidden = active || !isCandidateProfileCompleted();
   elements.panelTitle.textContent = active ? 'Recomendaciones' : 'Progreso';
@@ -374,6 +393,10 @@ function renderCvPreview() {
 function updateMuteButton() {
   elements.muteButton.setAttribute('aria-pressed', muted ? 'true' : 'false');
   elements.muteButton.innerHTML = muted
+    ? '<i data-lucide="mic-off"></i><span>Silenciado</span>'
+    : '<i data-lucide="mic"></i><span>Micrófono</span>';
+  elements.muteInterviewButton.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  elements.muteInterviewButton.innerHTML = muted
     ? '<i data-lucide="mic-off"></i><span>Silenciado</span>'
     : '<i data-lucide="mic"></i><span>Micrófono</span>';
   createIcons({ icons: { Mic, MicOff } });
@@ -740,7 +763,8 @@ function setRecommendationsStatus(text, kind = 'neutral') {
 function setRecommendationsLoading(isLoading) {
   recommendationsLoading = isLoading;
   elements.recommendationsLoading.hidden = !isLoading;
-  elements.refreshRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted();
+  elements.refreshRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted() || Boolean(conversation);
+  elements.backToProfileButton.disabled = Boolean(conversation);
   elements.continueRecommendationsButton.disabled = isLoading || !isCandidateProfileCompleted();
   updateCandidateRecommendationsButton();
 }
@@ -817,7 +841,7 @@ function renderCandidateRecommendations(data) {
   renderRecommendationCards(elements.recommendationsJobs, jobs, 'job');
   renderRecommendationCards(elements.recommendationsCourses, courses, 'course');
   renderRecommendationGaps(gaps);
-  createIcons({ icons: { ExternalLink, Briefcase, BookOpen, ArrowLeft, RefreshCw } });
+  createIcons({ icons: { ExternalLink, Briefcase, BookOpen, ArrowLeft, RefreshCw, Mic } });
 }
 
 function renderRecommendationsMeta(data) {
@@ -871,6 +895,7 @@ function createRecommendationCard(item, type) {
       : createRecommendationList('Refuerza', item.skill_gaps_addressed);
   const nextStep = document.createElement('p');
   const link = document.createElement('a');
+  const actions = document.createElement('div');
   const scoreValue = Number(item.score || 0);
 
   article.className = 'recommendation-card';
@@ -899,7 +924,19 @@ function createRecommendationCard(item, type) {
     link.setAttribute('aria-disabled', 'true');
   }
 
-  article.append(header, meta, reasons, secondary, nextStep, link);
+  actions.className = 'recommendation-card-actions';
+  actions.append(link);
+
+  if (type === 'job' && item.job_id) {
+    const practiceButton = document.createElement('button');
+    practiceButton.type = 'button';
+    practiceButton.className = 'practice-action';
+    practiceButton.innerHTML = '<i data-lucide="mic"></i><span>Practicar entrevista</span>';
+    practiceButton.addEventListener('click', () => openInterviewPractice(item));
+    actions.append(practiceButton);
+  }
+
+  article.append(header, meta, reasons, secondary, nextStep, actions);
   return article;
 }
 
@@ -951,6 +988,370 @@ function getScoreClass(score) {
   if (score >= 60) return 'is-mid';
 
   return 'is-low';
+}
+
+function setInterviewStatus(text, kind = 'neutral') {
+  elements.interviewStatus.textContent = text;
+  elements.interviewStatus.dataset.kind = kind;
+}
+
+function clearInterviewPanel() {
+  clearInterviewFeedbackTimer();
+  activeInterview = null;
+  interviewLoading = false;
+  document.body.classList.remove('interview-mode');
+  elements.interviewPanel.hidden = true;
+  elements.interviewTitle.textContent = 'Simulacion de entrevista';
+  elements.interviewDetail.textContent = 'Elegí una vacante recomendada para practicar con un entrevistador de voz.';
+  elements.interviewJobSummary.replaceChildren();
+  elements.interviewFeedback.replaceChildren();
+  elements.interviewFeedback.hidden = true;
+  setInterviewStatus('Sin iniciar.');
+  updateInterviewControls();
+}
+
+function backToRecommendationsFromInterview() {
+  if (conversation) return;
+  clearInterviewPanel();
+}
+
+function retryInterviewPractice() {
+  if (conversation || !activeInterview) return;
+
+  const job = activeInterview.job || {
+    job_id: activeInterview.session?.selected_job?.job_id,
+  };
+
+  clearInterviewPanel();
+  openInterviewPractice(job);
+}
+
+async function openInterviewPractice(job) {
+  if (!candidateSession?.intake || !candidateRecommendations?.run_id || !job?.job_id) return;
+
+  if (conversation) {
+    setInterviewStatus('Detén la conversación actual antes de iniciar una práctica.', 'error');
+    return;
+  }
+
+  clearInterviewFeedbackTimer();
+  interviewLoading = true;
+  document.body.classList.add('interview-mode');
+  elements.interviewPanel.hidden = false;
+  elements.interviewFeedback.hidden = true;
+  elements.interviewFeedback.replaceChildren();
+  elements.interviewTitle.textContent = 'Preparando práctica';
+  elements.interviewDetail.textContent = 'Creando una sesión corta con la vacante seleccionada.';
+  elements.interviewJobSummary.replaceChildren();
+  setInterviewStatus('Creando sesión de entrevista...');
+  updateInterviewControls();
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}/interview-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        job_id: job.job_id,
+        recommendation_run_id: candidateRecommendations.run_id,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudo crear la práctica.');
+    }
+
+    activeInterview = {
+      session: data.session,
+      sessionId: data.session_id,
+      agentId: data.agent_id,
+      context: data.context,
+      job,
+    };
+    renderInterviewSession(data.session, data.context);
+    setInterviewStatus('Práctica lista. Será breve, de 4 a 6 preguntas.');
+    addEvent('system', `Práctica preparada: ${data.session_id}`);
+  } catch (error) {
+    activeInterview = null;
+    setInterviewStatus(getErrorMessage(error, 'No se pudo crear la práctica.'), 'error');
+    addEvent('error', getErrorMessage(error, 'No se pudo crear la práctica.'));
+  } finally {
+    interviewLoading = false;
+    updateInterviewControls();
+  }
+}
+
+function renderInterviewSession(session, context = null) {
+  const selectedJob = session?.selected_job || context?.selected_job || {};
+  const title = selectedJob.title || 'Vacante recomendada';
+  const meta = [
+    selectedJob.company,
+    selectedJob.location_text,
+    selectedJob.modality,
+    selectedJob.fit_level ? `Ajuste ${selectedJob.fit_level}` : '',
+  ].filter(Boolean);
+  const details = [
+    selectedJob.description,
+    Array.isArray(selectedJob.reasons) && selectedJob.reasons.length ? `Match: ${selectedJob.reasons.join(' ')}` : '',
+  ].filter(Boolean);
+
+  elements.interviewTitle.textContent = title;
+  elements.interviewDetail.textContent = meta.length > 0 ? meta.join(' | ') : 'Entrevista simulada con base en la vacante elegida.';
+  elements.interviewJobSummary.replaceChildren();
+
+  if (details.length > 0) {
+    const summary = document.createElement('p');
+    summary.textContent = details.join(' ');
+    elements.interviewJobSummary.append(summary);
+  }
+
+  const chips = [selectedJob.provider, selectedJob.employment_type, selectedJob.score ? `${Math.round(selectedJob.score)}% match` : '']
+    .filter(Boolean)
+    .map((value) => {
+      const chip = document.createElement('span');
+      chip.textContent = value;
+      return chip;
+    });
+
+  if (chips.length > 0) {
+    const chipRow = document.createElement('div');
+    chipRow.className = 'interview-chips';
+    chipRow.append(...chips);
+    elements.interviewJobSummary.append(chipRow);
+  }
+}
+
+function updateInterviewControls() {
+  const interviewSelected = Boolean(activeInterview);
+  const interviewConnected = Boolean(conversation && conversationMode === 'interview');
+  const anyConversation = Boolean(conversation);
+
+  elements.startInterviewButton.disabled = !interviewSelected || interviewLoading || anyConversation;
+  elements.stopInterviewButton.disabled = !interviewConnected;
+  elements.muteInterviewButton.disabled = !interviewConnected;
+  elements.backToRecommendationsButton.disabled = interviewLoading || anyConversation;
+  elements.retryInterviewButton.hidden = !interviewSelected || interviewConnected;
+  elements.retryInterviewButton.disabled = interviewLoading || anyConversation;
+  elements.refreshRecommendationsButton.disabled = recommendationsLoading || !isCandidateProfileCompleted() || anyConversation;
+  elements.backToProfileButton.disabled = anyConversation;
+  updateMuteButton();
+}
+
+async function startInterviewConversation() {
+  if (!activeInterview || conversation) return;
+
+  try {
+    conversationMode = 'interview';
+    elements.connectionStatus.textContent = 'Conectando';
+    elements.startInterviewButton.disabled = true;
+    setInterviewStatus('Solicitando acceso al micrófono...');
+    addEvent('system', 'Solicitando acceso al micrófono para práctica.');
+
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const sessionOptions = {
+      agentId: activeInterview.agentId,
+      connectionType: 'webrtc',
+      dynamicVariables: buildInterviewDynamicVariables(),
+      onConversationCreated: (createdConversation) => {
+        conversation = createdConversation;
+      },
+      onConnect: ({ conversationId }) => {
+        setConnectedState(true);
+        setInterviewStatus('Entrevista en curso. Responde como si fuera con el empleador.');
+        activeInterview.conversationId = conversationId;
+        addEvent('system', `Práctica iniciada: ${conversationId}`);
+        window.setTimeout(() => sendInterviewContext(conversationId), 700);
+      },
+      onDisconnect: (details) => {
+        conversation = null;
+        conversationMode = null;
+        setConnectedState(false);
+        setInterviewStatus('Conexión finalizada. Esperando feedback...');
+        addEvent('system', `Práctica finalizada${formatDisconnectDetails(details)}.`);
+        scheduleInterviewFeedbackPoll(1000);
+      },
+      onError: (error) => {
+        const message = getErrorMessage(error, 'Error de entrevista.');
+        conversation = null;
+        conversationMode = null;
+        setConnectedState(false);
+        setInterviewStatus(message, 'error');
+        addEvent('error', message);
+      },
+      onModeChange: (mode) => {
+        const speaking = mode?.mode === 'speaking';
+        elements.agentStatus.textContent = speaking ? 'Entrevistando' : 'Escuchando';
+      },
+      onMessage: (message) => {
+        if (message?.message) {
+          addEvent(message.source === 'user' ? 'user' : 'agent', message.message);
+        }
+      },
+      onAgentToolResponse: () => {
+        setInterviewStatus('Feedback recibido del agente. Guardando...');
+        addEvent('system', 'El agente envió feedback de entrevista.');
+        scheduleInterviewFeedbackPoll(700);
+      },
+    };
+
+    conversation = await Conversation.startSession(sessionOptions);
+  } catch (error) {
+    conversation = null;
+    conversationMode = null;
+    setConnectedState(false);
+    setInterviewStatus(getErrorMessage(error, 'No se pudo iniciar la práctica.'), 'error');
+    addEvent('error', getErrorMessage(error, 'No se pudo iniciar la práctica.'));
+  }
+}
+
+function buildInterviewDynamicVariables() {
+  if (!activeInterview?.context) return undefined;
+
+  return {
+    interview_session_id: activeInterview.sessionId,
+    intake_code: candidateSession?.code || '',
+    candidate_profile_summary: activeInterview.context.profile_summary || '',
+    selected_job_summary: activeInterview.context.job_summary || '',
+    selected_job_title: activeInterview.context.selected_job?.title || '',
+    selected_job_company: activeInterview.context.selected_job?.company || '',
+  };
+}
+
+function sendInterviewContext(conversationId) {
+  if (!conversation || !activeInterview?.context) return;
+
+  const context = [
+    'CONTEXTO PARA SIMULACION DE ENTREVISTA. No leas este bloque en voz alta.',
+    `interview_session_id: ${activeInterview.sessionId}`,
+    `elevenlabs_conversation_id: ${conversationId || ''}`,
+    'Perfil del candidato:',
+    activeInterview.context.profile_summary || 'Perfil no resumido.',
+    'Vacante elegida:',
+    activeInterview.context.job_summary || 'Vacante no resumida.',
+    'Instrucciones:',
+    activeInterview.context.instructions,
+    'Al finalizar, llama save_interview_feedback con interview_session_id, elevenlabs_conversation_id, scores y feedback.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  conversation.sendContextualUpdate(context, {
+    contextId: `interview_${activeInterview.sessionId}`,
+  });
+  addEvent('system', 'Contexto de práctica enviado al agente.');
+}
+
+function scheduleInterviewFeedbackPoll(delayMs = 2500) {
+  clearInterviewFeedbackTimer();
+  interviewFeedbackTimer = window.setTimeout(() => pollInterviewFeedback({ repeat: true }), delayMs);
+}
+
+function clearInterviewFeedbackTimer() {
+  if (!interviewFeedbackTimer) return;
+
+  window.clearTimeout(interviewFeedbackTimer);
+  interviewFeedbackTimer = null;
+}
+
+async function pollInterviewFeedback({ repeat = false } = {}) {
+  clearInterviewFeedbackTimer();
+
+  if (!activeInterview?.sessionId || !candidateSession?.code) return;
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/intakes/${candidateSession.code}/interview-sessions/${activeInterview.sessionId}`,
+    );
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error || 'No se pudo leer el feedback.');
+    }
+
+    activeInterview.session = data.session;
+
+    if (data.session.status === 'completed') {
+      renderInterviewFeedback(data.session);
+      setInterviewStatus('Feedback listo.');
+      addEvent('system', 'Feedback de entrevista guardado.');
+      updateInterviewControls();
+      return;
+    }
+
+    if (data.session.status === 'failed') {
+      setInterviewStatus('La simulación terminó con error al guardar feedback.', 'error');
+      updateInterviewControls();
+      return;
+    }
+
+    if (repeat) {
+      setInterviewStatus('Esperando feedback del agente...');
+      scheduleInterviewFeedbackPoll(3000);
+    }
+  } catch (error) {
+    setInterviewStatus(getErrorMessage(error, 'No se pudo leer el feedback.'), 'error');
+    addEvent('error', getErrorMessage(error, 'No se pudo leer el feedback.'));
+  }
+}
+
+function renderInterviewFeedback(session) {
+  const feedback = session.feedback || {};
+  const scores = session.scores || {};
+  const overall = Number(feedback.overall_score || scores.overall || 0);
+  const title = document.createElement('div');
+  const heading = document.createElement('h4');
+  const score = document.createElement('span');
+  const summary = document.createElement('p');
+
+  elements.interviewFeedback.replaceChildren();
+  elements.interviewFeedback.hidden = false;
+  title.className = 'interview-feedback-title';
+  heading.textContent = 'Feedback de práctica';
+  score.className = `score-pill ${getScoreClass(overall)}`;
+  score.textContent = `${Math.round(overall)}%`;
+  title.append(heading, score);
+  elements.interviewFeedback.append(title);
+
+  if (feedback.summary) {
+    summary.textContent = feedback.summary;
+    elements.interviewFeedback.append(summary);
+  }
+
+  elements.interviewFeedback.append(
+    createFeedbackList('Fortalezas', feedback.strengths),
+    createFeedbackList('Mejoras', feedback.improvements),
+    createFeedbackList('Respuestas sugeridas', feedback.suggested_answers),
+    createFeedbackList('Próximos pasos', feedback.next_steps),
+  );
+}
+
+function createFeedbackList(label, values) {
+  const block = document.createElement('div');
+  const title = document.createElement('strong');
+  const list = document.createElement('ul');
+  const normalized = Array.isArray(values) ? values.filter(Boolean).slice(0, 5) : [];
+
+  block.className = 'feedback-list';
+  title.textContent = label;
+
+  if (normalized.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Sin observaciones.';
+    block.append(title, empty);
+    return block;
+  }
+
+  for (const value of normalized) {
+    const item = document.createElement('li');
+    item.textContent = value;
+    list.append(item);
+  }
+
+  block.append(title, list);
+  return block;
 }
 
 function limitAgentContextText(text, maxLength = 2200) {
@@ -1192,6 +1593,7 @@ async function startConversation() {
   if (conversation) return;
 
   try {
+    conversationMode = 'profile';
     elements.connectionStatus.textContent = 'Conectando';
     elements.startButton.disabled = true;
     addEvent('system', 'Solicitando acceso al micrófono.');
@@ -1212,11 +1614,13 @@ async function startConversation() {
       onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
         conversation = null;
+        conversationMode = null;
         setConnectedState(false);
         addEvent('system', `Conexión finalizada${formatDisconnectDetails(details)}.`);
       },
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de conversación.');
+        conversationMode = null;
         addEvent('error', message);
         elements.connectionStatus.textContent = 'Error';
         elements.startButton.disabled = false;
@@ -1259,6 +1663,7 @@ async function startConversation() {
     conversation = await Conversation.startSession(sessionOptions);
   } catch (error) {
     conversation = null;
+    conversationMode = null;
     setConnectedState(false);
     addEvent('error', getErrorMessage(error, 'No se pudo iniciar la conversación.'));
   }
@@ -1268,9 +1673,15 @@ async function stopConversation() {
   if (!conversation) return;
   clearCandidateAutoEndTimer();
   const activeConversation = conversation;
+  const previousMode = conversationMode;
   conversation = null;
+  conversationMode = null;
   await activeConversation.endSession();
   setConnectedState(false);
+  if (previousMode === 'interview') {
+    setInterviewStatus('Conexión finalizada. Esperando feedback...');
+    scheduleInterviewFeedbackPoll(1000);
+  }
 }
 
 function toggleMute() {
@@ -1310,6 +1721,11 @@ elements.copyIntakeUrlButton.addEventListener('click', copyIntakeUrl);
 elements.continueRecommendationsButton.addEventListener('click', openCandidateRecommendations);
 elements.refreshRecommendationsButton.addEventListener('click', fetchCandidateRecommendations);
 elements.backToProfileButton.addEventListener('click', closeCandidateRecommendations);
+elements.startInterviewButton.addEventListener('click', startInterviewConversation);
+elements.stopInterviewButton.addEventListener('click', stopConversation);
+elements.muteInterviewButton.addEventListener('click', toggleMute);
+elements.retryInterviewButton.addEventListener('click', retryInterviewPractice);
+elements.backToRecommendationsButton.addEventListener('click', backToRecommendationsFromInterview);
 
 setConnectedState(false);
 initializeCandidateRoute();
