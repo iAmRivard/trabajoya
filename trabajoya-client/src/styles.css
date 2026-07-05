@@ -326,6 +326,24 @@ h1 {
   color: #b93525;
 }
 
+.verify-status[data-kind="loading"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #264536;
+}
+
+.verify-status[data-kind="loading"]::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid #c6d9cb;
+  border-top-color: #143e2a;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
 body.candidate-mode .candidate-gate {
   grid-template-columns: 1fr;
   gap: 12px;
@@ -681,6 +699,16 @@ body.voice-active.candidate-mode[data-candidate-view="profile"] .voice-orbit spa
   opacity: 1;
 }
 
+body.voice-starting.candidate-mode[data-candidate-view="profile"] .voice-orbit {
+  border-color: #c6d9cb;
+  background: #f0f7f1;
+}
+
+body.voice-starting.candidate-mode[data-candidate-view="profile"] .voice-orbit span {
+  animation-play-state: running;
+  opacity: 0.9;
+}
+
 body.voice-agent-speaking.candidate-mode[data-candidate-view="profile"] .voice-orbit {
   border-color: #b9cfbf;
   background: #edf7f0;
@@ -692,9 +720,13 @@ body.candidate-mode[data-candidate-view="profile"] .session-copy h2 {
 
 .candidate-profile-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
   margin-top: 12px;
+}
+
+.candidate-profile-facts .info-pill:last-child {
+  grid-column: 1 / -1;
 }
 
 .controls {
@@ -1067,7 +1099,8 @@ body.candidate-mode .recommendations-grid {
   color: #26352c;
   font-size: 0.82rem;
   line-height: 1.22;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .next-step {
@@ -1429,6 +1462,10 @@ body.candidate-mode .candidate-bottom-action button {
   min-height: 54px;
   font-size: 1rem;
   font-weight: 850;
+}
+
+body.voice-starting.candidate-mode .candidate-bottom-action button i {
+  animation: spin 0.9s linear infinite;
 }
 
 .candidate-bottom-action p {

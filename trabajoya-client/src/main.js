@@ -130,6 +130,7 @@ let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
 let candidateView = 'profile';
 let candidatePrimaryAction = null;
+let profileStarting = false;
 let candidateAutoEndTimer = null;
 let candidateCloseAfterSave = false;
 let candidateSaveCompletedAt = 0;
@@ -296,7 +297,7 @@ function addEvent(kind, text) {
 
 function setConnectedState(isConnected) {
   document.body.classList.toggle('voice-active', isConnected);
-  elements.startButton.disabled = isConnected || !canStartConversation() || Boolean(activeInterview);
+  elements.startButton.disabled = isConnected || profileStarting || !canStartConversation() || Boolean(activeInterview);
   elements.stopButton.disabled = !isConnected;
   elements.muteButton.disabled = !isConnected;
   elements.textInput.disabled = !isConnected;
@@ -344,6 +345,22 @@ function updateCandidateBodyFlags() {
   if (!candidateSession) return;
 
   document.body.classList.toggle('has-initial-cv', Boolean(candidateSession.intake?.initial_data?.cv_text));
+}
+
+function updateVoiceStartingClass() {
+  document.body.classList.toggle('voice-starting', profileStarting || interviewStarting);
+}
+
+function setProfileStarting(isStarting) {
+  profileStarting = isStarting;
+  updateVoiceStartingClass();
+  updateCandidatePrimaryAction();
+}
+
+function setInterviewStarting(isStarting) {
+  interviewStarting = isStarting;
+  updateVoiceStartingClass();
+  updateInterviewControls();
 }
 
 function updateCandidateHeader() {
@@ -404,6 +421,17 @@ function updateCandidatePrimaryAction() {
       icon: 'square',
       disabled: true,
       hint: 'Revisa que el enlace esté completo.',
+    });
+    return;
+  }
+
+  if (profileStarting) {
+    setCandidatePrimaryConfig({
+      action: null,
+      label: 'Conectando',
+      icon: 'refresh-cw',
+      disabled: true,
+      hint: 'Activando micrófono y conectando con TrabajoYA.',
     });
     return;
   }
@@ -501,7 +529,7 @@ function updateCandidatePrimaryAction() {
     action: 'start-profile',
     label: 'Iniciar perfil',
     icon: 'play',
-    disabled: !canStartConversation() || anyConversation || Boolean(activeInterview),
+    disabled: !canStartConversation() || anyConversation || profileStarting || Boolean(activeInterview),
     hint: candidateSession.intake?.initial_data?.cv_text
       ? 'Ya tenemos tu CV y contexto inicial.'
       : 'Puedes subir tu CV antes de iniciar si lo tienes.',
@@ -1407,7 +1435,7 @@ function clearInterviewPanel() {
   clearInterviewFeedbackTimer();
   activeInterview = null;
   interviewLoading = false;
-  interviewStarting = false;
+  setInterviewStarting(false);
   document.body.classList.remove('interview-mode');
   elements.interviewPanel.hidden = true;
   elements.interviewTitle.textContent = 'Simulacion de entrevista';
@@ -1545,12 +1573,12 @@ function updateInterviewControls() {
   const interviewConnected = Boolean(conversation && conversationMode === 'interview');
   const anyConversation = Boolean(conversation);
 
-  elements.startInterviewButton.disabled = !interviewSelected || interviewLoading || anyConversation;
+  elements.startInterviewButton.disabled = !interviewSelected || interviewLoading || interviewStarting || anyConversation;
   elements.stopInterviewButton.disabled = !interviewConnected;
   elements.muteInterviewButton.disabled = !interviewConnected;
-  elements.backToRecommendationsButton.disabled = interviewLoading || anyConversation;
+  elements.backToRecommendationsButton.disabled = interviewLoading || interviewStarting || anyConversation;
   elements.retryInterviewButton.hidden = !interviewSelected || interviewConnected;
-  elements.retryInterviewButton.disabled = interviewLoading || anyConversation;
+  elements.retryInterviewButton.disabled = interviewLoading || interviewStarting || anyConversation;
   elements.refreshRecommendationsButton.disabled = recommendationsLoading || !isCandidateProfileCompleted() || anyConversation;
   elements.backToProfileButton.disabled = anyConversation;
   updateMuteButton();
@@ -1558,11 +1586,11 @@ function updateInterviewControls() {
 }
 
 async function startInterviewConversation() {
-  if (!activeInterview || conversation) return;
+  if (!activeInterview || conversation || interviewStarting) return;
 
   try {
     conversationMode = 'interview';
-    interviewStarting = true;
+    setInterviewStarting(true);
     elements.connectionStatus.textContent = 'Conectando';
     elements.startInterviewButton.disabled = true;
     setInterviewStatus('Solicitando acceso al micrófono...', 'loading');
@@ -1586,7 +1614,7 @@ async function startInterviewConversation() {
         updateCandidatePrimaryAction();
       },
       onConnect: ({ conversationId }) => {
-        interviewStarting = false;
+        setInterviewStarting(false);
         setConnectedState(true);
         setInterviewStatus('Entrevista en curso. Responde como si fuera con el empleador.');
         activeInterview.conversationId = conversationId;
@@ -1595,7 +1623,7 @@ async function startInterviewConversation() {
       },
       onDisconnect: (details) => {
         clearInterviewAutoEndTimer();
-        interviewStarting = false;
+        setInterviewStarting(false);
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1606,7 +1634,7 @@ async function startInterviewConversation() {
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de entrevista.');
         clearInterviewAutoEndTimer();
-        interviewStarting = false;
+        setInterviewStarting(false);
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -1646,7 +1674,7 @@ async function startInterviewConversation() {
   } catch (error) {
     conversation = null;
     conversationMode = null;
-    interviewStarting = false;
+    setInterviewStarting(false);
     setConnectedState(false);
     setInterviewStatus(getErrorMessage(error, 'No se pudo iniciar la práctica.'), 'error');
     addEvent('error', getErrorMessage(error, 'No se pudo iniciar la práctica.'));
@@ -2114,16 +2142,20 @@ function sendCvContextToAgent() {
 }
 
 async function startConversation() {
-  if (conversation) return;
+  if (conversation || profileStarting) return;
 
   try {
+    setProfileStarting(true);
     conversationMode = 'profile';
     elements.connectionStatus.textContent = 'Conectando';
     elements.startButton.disabled = true;
+    setCandidateVerifyStatus('Solicitando acceso al micrófono...', 'loading');
     addEvent('system', 'Solicitando acceso al micrófono.');
 
     const microphoneCheck = await prepareVoiceMicrophone();
-    addEvent('system', describeMicrophoneCheck(microphoneCheck));
+    const microphoneMessage = describeMicrophoneCheck(microphoneCheck);
+    setCandidateVerifyStatus(`${microphoneMessage} Conectando con TrabajoYA...`, 'loading');
+    addEvent('system', microphoneMessage);
 
     const sessionOptions = {
       agentId: AGENT_ID,
@@ -2131,14 +2163,19 @@ async function startConversation() {
       preferHeadphonesForIosDevices: true,
       onConversationCreated: (createdConversation) => {
         conversation = createdConversation;
+        setCandidateVerifyStatus('Conexión creada. Preparando agente...', 'loading');
+        updateCandidatePrimaryAction();
       },
       onConnect: ({ conversationId }) => {
+        setProfileStarting(false);
         setConnectedState(true);
+        setCandidateVerifyStatus('Conversación iniciada. Completa tu perfil paso a paso.');
         addEvent('system', `Conexión iniciada: ${conversationId}`);
         window.setTimeout(sendInitialIntakeContext, 700);
       },
       onDisconnect: (details) => {
         clearCandidateAutoEndTimer();
+        setProfileStarting(false);
         conversation = null;
         conversationMode = null;
         setConnectedState(false);
@@ -2146,10 +2183,13 @@ async function startConversation() {
       },
       onError: (error) => {
         const message = getErrorMessage(error, 'Error de conversación.');
+        conversation = null;
         conversationMode = null;
+        setProfileStarting(false);
+        setConnectedState(false);
         addEvent('error', message);
         elements.connectionStatus.textContent = 'Error';
-        elements.startButton.disabled = false;
+        setCandidateVerifyStatus(message, 'error');
       },
       onModeChange: (mode) => {
         candidateAgentSpeaking = mode?.mode === 'speaking';
@@ -2191,8 +2231,10 @@ async function startConversation() {
   } catch (error) {
     conversation = null;
     conversationMode = null;
+    setProfileStarting(false);
     setConnectedState(false);
     addEvent('error', getErrorMessage(error, 'No se pudo iniciar la conversación.'));
+    setCandidateVerifyStatus(getErrorMessage(error, 'No se pudo iniciar la conversación.'), 'error');
   }
 }
 
