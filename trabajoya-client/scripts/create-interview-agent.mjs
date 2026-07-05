@@ -220,13 +220,16 @@ function saveInterviewFeedbackTool() {
 }
 
 function schemaField(schema) {
+  const defaultConstantValue =
+    schema.type === 'array' ? [] : schema.type === 'object' ? {} : schema.type === 'boolean' ? false : '';
+
   return {
     description: '',
     enum: null,
     is_system_provided: false,
     dynamic_variable: '',
     allowed_values_dynamic_variable: '',
-    constant_value: '',
+    constant_value: defaultConstantValue,
     is_omitted: false,
     ...schema,
   };
