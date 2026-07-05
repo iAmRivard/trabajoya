@@ -182,22 +182,22 @@ function saveInterviewFeedbackTool() {
               strengths: schemaField({
                 type: 'array',
                 description: 'Fortalezas observadas.',
-                items: { type: 'string' },
+                items: schemaField({ type: 'string', description: 'Fortaleza concreta.' }),
               }),
               improvements: schemaField({
                 type: 'array',
                 description: 'Areas de mejora concretas.',
-                items: { type: 'string' },
+                items: schemaField({ type: 'string', description: 'Area de mejora concreta.' }),
               }),
               suggested_answers: schemaField({
                 type: 'array',
                 description: 'Respuestas sugeridas o marcos de respuesta.',
-                items: { type: 'string' },
+                items: schemaField({ type: 'string', description: 'Respuesta sugerida.' }),
               }),
               next_steps: schemaField({
                 type: 'array',
                 description: 'Proximos pasos recomendados.',
-                items: { type: 'string' },
+                items: schemaField({ type: 'string', description: 'Proximo paso recomendado.' }),
               }),
               closing_note: schemaField({ type: 'string', description: 'Nota final breve.' }),
             },
