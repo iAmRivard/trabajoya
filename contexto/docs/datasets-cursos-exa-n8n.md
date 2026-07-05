@@ -8,7 +8,7 @@ la tarea diaria/manual y el backend de TrabajoYA para normalizar y guardar en
 PostgreSQL.
 
 ```text
-n8n Manual/Cron -> Exa /search -> n8n Code normalize -> TrabajoYA API -> PostgreSQL
+n8n Manual/Cron -> HTTP Exa /search -> Code normalize -> HTTP TrabajoYA API -> PostgreSQL
 ```
 
 ## Fuentes iniciales
@@ -65,7 +65,10 @@ Incluye:
 - Manual Trigger: para actualizar cuando queras.
 - Schedule Trigger: diario a las 5 AM.
 - Code node Configurar llaves: para prueba rapida desde la UI.
-- Code node: consulta Exa, normaliza resultados y llama TrabajoYA.
+- Code node Preparar busquedas: arma los payloads para Exa.
+- HTTP Request Buscar en Exa: consulta Exa sin depender de `fetch`.
+- Code node Normalizar cursos: convierte resultados a cursos candidatos.
+- HTTP Request Guardar en TrabajoYA: llama el endpoint del backend.
 ```
 
 El workflow inicia desactivado para no interferir con otros flujos. Importarlo,
