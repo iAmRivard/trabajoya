@@ -57,6 +57,16 @@ create index if not exists job_vacancies_last_seen_at_idx
 create index if not exists job_vacancies_skills_gin_idx
   on public.job_vacancies using gin (skills);
 
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 drop trigger if exists job_vacancies_set_updated_at on public.job_vacancies;
 
 create trigger job_vacancies_set_updated_at
