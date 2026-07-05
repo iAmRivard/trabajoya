@@ -92,6 +92,10 @@ button svg,
   padding: 28px;
 }
 
+.candidate-main {
+  display: contents;
+}
+
 .identity {
   display: flex;
   align-items: center;
@@ -170,6 +174,38 @@ h1 {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.candidate-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #d8e1d8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f9fbf8;
+}
+
+.candidate-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.candidate-step-badge {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b9cfbf;
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: #143e2a;
+  background: #edf7f0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .candidate-gate {
@@ -290,14 +326,129 @@ h1 {
   color: #b93525;
 }
 
-body.candidate-mode #adminAuthPanel,
-body.candidate-mode .panel-tabs,
-body.candidate-mode #refreshProfilesButton {
+body.candidate-mode .candidate-gate {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 14px;
+}
+
+body.candidate-mode .candidate-gate h2 {
+  font-size: 1.08rem;
+}
+
+body.candidate-mode .candidate-flow {
+  grid-template-columns: repeat(5, minmax(72px, 1fr));
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+body.candidate-mode .candidate-flow li {
+  min-height: 48px;
+  gap: 4px;
+  padding: 7px 6px;
+  font-size: 0.72rem;
+}
+
+body.candidate-mode .candidate-flow li::before {
+  width: 20px;
+  height: 20px;
+  font-size: 0.68rem;
+}
+
+body.candidate-mode .candidate-status-row {
+  align-items: flex-start;
+}
+
+body.candidate-mode .candidate-status-row .primary-action {
   display: none;
 }
 
 body.candidate-mode .side-panel {
-  grid-template-rows: auto minmax(0, 1fr);
+  display: none;
+}
+
+body.candidate-mode {
+  background: #f7f8f4;
+}
+
+body.candidate-mode .app-shell {
+  width: min(760px, 100%);
+  grid-template-columns: 1fr;
+  align-items: start;
+  padding: 0;
+}
+
+body.candidate-mode .workspace {
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 18px 18px calc(104px + env(safe-area-inset-bottom));
+}
+
+body.candidate-mode .candidate-main {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+body.candidate-mode .identity {
+  gap: 12px;
+}
+
+body.candidate-mode .identity h1 {
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+body.candidate-mode .mark {
+  width: 42px;
+  height: 42px;
+}
+
+body.candidate-mode .mark-line {
+  left: 9px;
+  right: 9px;
+  top: 14px;
+}
+
+body.candidate-mode .mark-dot {
+  width: 11px;
+  height: 11px;
+  right: 9px;
+  bottom: 9px;
+}
+
+body.candidate-mode .status-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.candidate-mode .status-item {
+  min-height: 42px;
+  padding: 0 10px;
+  font-size: 0.88rem;
+}
+
+body.candidate-mode .status-item:nth-child(3) {
+  display: none;
+}
+
+body.candidate-mode[data-candidate-view="loading"] .voice-surface,
+body.candidate-mode[data-candidate-view="loading"] .cv-panel,
+body.candidate-mode[data-candidate-view="loading"] .controls,
+body.candidate-mode[data-candidate-view="loading"] .text-composer,
+body.candidate-mode[data-candidate-view="error"] .voice-surface,
+body.candidate-mode[data-candidate-view="error"] .cv-panel,
+body.candidate-mode[data-candidate-view="error"] .controls,
+body.candidate-mode[data-candidate-view="error"] .text-composer,
+body.candidate-mode[data-candidate-view="saved"] .cv-panel,
+body.candidate-mode[data-candidate-view="saved"] .controls,
+body.candidate-mode[data-candidate-view="saved"] .text-composer {
+  display: none;
 }
 
 body.recommendations-mode .voice-surface,
@@ -309,6 +460,14 @@ body.recommendations-mode .text-composer {
 
 body.interview-mode .recommendations-grid,
 body.interview-mode .profile-gaps {
+  display: none;
+}
+
+body.candidate-mode.interview-mode .recommendations-header,
+body.candidate-mode.interview-mode .recommendations-tabs,
+body.candidate-mode.interview-mode .recommendations-status,
+body.candidate-mode.interview-mode .recommendations-meta,
+body.candidate-mode.interview-mode .recommendations-loading {
   display: none;
 }
 
@@ -391,6 +550,36 @@ body.interview-mode .profile-gaps {
   line-height: 1.6;
 }
 
+body.candidate-mode .voice-surface {
+  grid-template-columns: 1fr;
+  gap: 14px;
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+body.candidate-mode .voice-orbit {
+  min-height: 112px;
+  gap: 8px;
+  padding: 14px;
+}
+
+body.candidate-mode .voice-orbit span {
+  min-height: 34px;
+}
+
+body.candidate-mode .session-copy h2 {
+  margin-bottom: 6px;
+  font-size: 1.35rem;
+}
+
+body.candidate-mode .session-copy p {
+  max-width: none;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;
@@ -462,6 +651,21 @@ body.interview-mode .profile-gaps {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+body.candidate-mode .cv-panel {
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+body.candidate-mode .cv-row {
+  grid-template-columns: 1fr;
+}
+
+body.candidate-mode .cv-row button {
+  width: 100%;
 }
 
 .recommendations-panel {
@@ -555,10 +759,76 @@ body.interview-mode .profile-gaps {
   line-height: 1.2;
 }
 
+.recommendations-tabs {
+  display: flex;
+  gap: 4px;
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 4px;
+  background: #eef3ef;
+}
+
+.segment-button {
+  flex: 1 1 0;
+  min-height: 42px;
+  border: 1px solid transparent;
+  padding: 0 12px;
+  color: #526259;
+  background: transparent;
+  font-weight: 800;
+}
+
+.segment-button:hover:not(:disabled) {
+  transform: none;
+}
+
+.segment-button.is-active {
+  border-color: #cfd9d0;
+  color: #143e2a;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(32, 42, 35, 0.06);
+}
+
+.segment-button svg {
+  width: 17px;
+  height: 17px;
+}
+
 .recommendations-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.recommendations-panel[data-active-tab="jobs"] [data-recommendation-section="courses"],
+.recommendations-panel[data-active-tab="courses"] [data-recommendation-section="jobs"] {
+  display: none;
+}
+
+body:not(.candidate-mode) .recommendations-panel[data-active-tab] [data-recommendation-section] {
+  display: grid;
+}
+
+body.candidate-mode .recommendations-panel {
+  border: 0;
+  padding: 0;
+}
+
+body.candidate-mode .recommendations-header {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+body.candidate-mode .recommendations-header h2 {
+  font-size: 1.35rem;
+}
+
+body.candidate-mode .recommendations-actions {
+  display: none;
+}
+
+body.candidate-mode .recommendations-grid {
+  grid-template-columns: 1fr;
 }
 
 .recommendation-column {
@@ -654,6 +924,30 @@ body.interview-mode .profile-gaps {
   color: #24382f;
 }
 
+.recommendation-highlight {
+  margin: 0;
+  color: #24382f;
+  font-size: 0.92rem;
+  line-height: 1.42;
+}
+
+.recommendation-details {
+  border-top: 1px solid #eef1ec;
+  padding-top: 8px;
+}
+
+.recommendation-details summary {
+  color: #143e2a;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.recommendation-details[open] {
+  display: grid;
+  gap: 10px;
+}
+
 .recommendation-points {
   display: grid;
   gap: 6px;
@@ -721,6 +1015,22 @@ body.interview-mode .profile-gaps {
   background: #f6f9fd;
   font-size: 0.86rem;
   font-weight: 700;
+}
+
+body.candidate-mode .recommendation-card {
+  gap: 9px;
+  padding: 13px;
+}
+
+body.candidate-mode .recommendation-card-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+body.candidate-mode .recommendation-card-actions button,
+body.candidate-mode .source-link {
+  width: 100%;
+  justify-content: center;
 }
 
 .interview-panel {
@@ -807,6 +1117,40 @@ body.interview-mode .profile-gaps {
   padding-top: 14px;
 }
 
+body.candidate-mode .interview-panel {
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+body.candidate-mode .interview-header {
+  grid-template-columns: 1fr;
+}
+
+body.candidate-mode .interview-header h3 {
+  font-size: 1.2rem;
+}
+
+body.candidate-mode .interview-header button {
+  width: 100%;
+}
+
+body.candidate-mode .interview-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.candidate-mode .interview-controls .primary-action {
+  grid-column: 1 / -1;
+}
+
+body.candidate-mode .interview-feedback {
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fbf8;
+}
+
 .interview-feedback-title {
   display: flex;
   align-items: start;
@@ -867,6 +1211,38 @@ body.interview-mode .profile-gaps {
 .primary-action:hover:not(:disabled) {
   border-color: #205c40;
   background: #205c40;
+}
+
+.candidate-bottom-action {
+  display: grid;
+  gap: 7px;
+}
+
+body.candidate-mode .candidate-bottom-action {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  margin: 6px -18px 0;
+  border-top: 1px solid rgba(217, 221, 212, 0.9);
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -12px 34px rgba(32, 42, 35, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+body.candidate-mode .candidate-bottom-action button {
+  width: 100%;
+  min-height: 54px;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.candidate-bottom-action p {
+  margin: 0;
+  color: #59685f;
+  font-size: 0.82rem;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .text-composer {
@@ -1211,6 +1587,55 @@ body.interview-mode .profile-gaps {
   }
 
   .cv-row {
+    grid-template-columns: 1fr;
+  }
+
+  body.candidate-mode .app-shell {
+    width: 100%;
+    padding: 0;
+  }
+
+  body.candidate-mode .workspace {
+    padding: 14px 14px calc(104px + env(safe-area-inset-bottom));
+  }
+
+  body.candidate-mode .candidate-bottom-action {
+    margin: 6px -14px 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  body.candidate-mode .status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.candidate-mode .candidate-header {
+    padding: 11px 12px;
+  }
+
+  body.candidate-mode .candidate-flow {
+    grid-template-columns: repeat(5, minmax(66px, 1fr));
+  }
+
+  body.candidate-mode .candidate-status-row {
+    flex-direction: row;
+  }
+
+  body.candidate-mode .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.candidate-mode .controls .primary-action {
+    grid-column: 1 / -1;
+  }
+
+  body.candidate-mode .text-composer {
+    display: none;
+  }
+
+  body.candidate-mode .recommendations-meta,
+  body.candidate-mode .gap-list {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }

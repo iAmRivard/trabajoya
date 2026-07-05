@@ -35,6 +35,13 @@ const elements = {
   startButton: document.querySelector('#startButton'),
   stopButton: document.querySelector('#stopButton'),
   muteButton: document.querySelector('#muteButton'),
+  candidateHeader: document.querySelector('#candidateHeader'),
+  candidateHeaderTitle: document.querySelector('#candidateHeaderTitle'),
+  candidateHeaderStep: document.querySelector('#candidateHeaderStep'),
+  candidateMain: document.querySelector('#candidateMain'),
+  candidateBottomAction: document.querySelector('#candidateBottomAction'),
+  candidatePrimaryActionButton: document.querySelector('#candidatePrimaryActionButton'),
+  candidateBottomHint: document.querySelector('#candidateBottomHint'),
   candidateGate: document.querySelector('#candidateGate'),
   candidateGateTitle: document.querySelector('#candidateGateTitle'),
   candidateGateDetail: document.querySelector('#candidateGateDetail'),
@@ -48,6 +55,11 @@ const elements = {
   recommendationsMeta: document.querySelector('#recommendationsMeta'),
   recommendationsJobs: document.querySelector('#recommendationsJobs'),
   recommendationsCourses: document.querySelector('#recommendationsCourses'),
+  recommendationsTabs: document.querySelector('#recommendationsTabs'),
+  recommendationsJobsTab: document.querySelector('#recommendationsJobsTab'),
+  recommendationsCoursesTab: document.querySelector('#recommendationsCoursesTab'),
+  recommendationsJobsSection: document.querySelector('#recommendationsJobsSection'),
+  recommendationsCoursesSection: document.querySelector('#recommendationsCoursesSection'),
   recommendationsGaps: document.querySelector('#recommendationsGaps'),
   refreshRecommendationsButton: document.querySelector('#refreshRecommendationsButton'),
   backToProfileButton: document.querySelector('#backToProfileButton'),
@@ -115,6 +127,8 @@ let intakesLoaded = false;
 let extractedCv = null;
 let adminAuthenticated = false;
 let candidateSession = getCandidateSessionFromPath();
+let candidateView = 'profile';
+let candidatePrimaryAction = null;
 let candidateAutoEndTimer = null;
 let candidateCloseAfterSave = false;
 let candidateSaveCompletedAt = 0;
@@ -122,6 +136,7 @@ let candidateFinalAgentMessageAt = 0;
 let candidateAgentSpeaking = false;
 let candidateRecommendations = null;
 let recommendationsLoading = false;
+let recommendationsTab = 'jobs';
 let conversationMode = null;
 let activeInterview = null;
 let interviewLoading = false;
@@ -304,10 +319,231 @@ function setConnectedState(isConnected) {
 
   updateCandidateRecommendationsButton();
   updateInterviewControls();
+  updateCandidatePrimaryAction();
 }
 
 function canStartConversation() {
   return !candidateSession || Boolean(candidateSession.intake);
+}
+
+function setCandidateView(view) {
+  if (!candidateSession) return;
+
+  candidateView = view;
+  document.body.dataset.candidateView = view;
+  updateCandidateHeader();
+  updateCandidatePrimaryAction();
+}
+
+function updateCandidateHeader() {
+  if (!candidateSession || !elements.candidateHeader) return;
+
+  const viewCopy = {
+    loading: ['Preparando perfil', 'Registro'],
+    error: ['Enlace no disponible', 'Revisar'],
+    profile: ['Completa tu perfil', 'Perfil'],
+    saved: ['Perfil guardado', 'Guardado'],
+    recommendations: ['Opciones recomendadas', 'Opciones'],
+    interview: ['Práctica de entrevista', 'Entrevista'],
+    feedback: ['Feedback listo', 'Feedback'],
+  };
+  const [title, step] = viewCopy[candidateView] || viewCopy.profile;
+
+  elements.candidateHeader.hidden = false;
+  elements.candidateHeaderTitle.textContent = title;
+  elements.candidateHeaderStep.textContent = step;
+}
+
+function setCandidatePrimaryConfig({ action, label, icon, disabled = false, hint = '' }) {
+  if (!elements.candidatePrimaryActionButton || !elements.candidateBottomAction) return;
+
+  candidatePrimaryAction = action;
+  elements.candidateBottomAction.hidden = !candidateSession;
+  elements.candidatePrimaryActionButton.disabled = disabled || !action;
+  elements.candidatePrimaryActionButton.dataset.action = action || '';
+  elements.candidatePrimaryActionButton.innerHTML = `<i data-lucide="${icon}"></i><span>${label}</span>`;
+  elements.candidateBottomHint.textContent = hint;
+  elements.candidateBottomHint.hidden = !hint;
+  createIcons({ icons: { ArrowRight, Briefcase, CheckCircle, Mic, Play, RefreshCw, Square } });
+}
+
+function updateCandidatePrimaryAction() {
+  if (!candidateSession || !elements.candidateBottomAction) return;
+
+  const anyConversation = Boolean(conversation);
+  const profileDone = isCandidateProfileCompleted();
+  const isRecommendationsView = document.body.classList.contains('recommendations-mode');
+  const isInterviewView = document.body.classList.contains('interview-mode');
+
+  if (candidateView === 'loading') {
+    setCandidatePrimaryConfig({
+      action: null,
+      label: 'Cargando',
+      icon: 'refresh-cw',
+      disabled: true,
+      hint: 'Estamos validando tu enlace.',
+    });
+    return;
+  }
+
+  if (candidateView === 'error') {
+    setCandidatePrimaryConfig({
+      action: null,
+      label: 'No disponible',
+      icon: 'square',
+      disabled: true,
+      hint: 'Revisa que el enlace esté completo.',
+    });
+    return;
+  }
+
+  if (conversationMode === 'interview' && anyConversation) {
+    setCandidatePrimaryConfig({
+      action: 'stop-conversation',
+      label: 'Detener práctica',
+      icon: 'square',
+      hint: 'Cuando termine, buscaremos tu feedback.',
+    });
+    return;
+  }
+
+  if (conversationMode === 'profile' && anyConversation) {
+    setCandidatePrimaryConfig({
+      action: candidateCloseAfterSave ? null : 'stop-conversation',
+      label: candidateCloseAfterSave ? 'Guardando perfil' : 'Detener',
+      icon: candidateCloseAfterSave ? 'check-circle' : 'square',
+      disabled: candidateCloseAfterSave,
+      hint: candidateCloseAfterSave
+        ? 'Esperando el cierre del agente para no cortar el audio.'
+        : 'Habla con calma; el agente irá paso a paso.',
+    });
+    return;
+  }
+
+  if (interviewCloseAfterFeedback) {
+    setCandidatePrimaryConfig({
+      action: null,
+      label: 'Cerrando práctica',
+      icon: 'check-circle',
+      disabled: true,
+      hint: 'El agente está terminando antes de mostrar el feedback.',
+    });
+    return;
+  }
+
+  if (candidateView === 'feedback') {
+    setCandidatePrimaryConfig({
+      action: activeInterview ? 'retry-interview' : 'back-recommendations',
+      label: activeInterview ? 'Repetir práctica' : 'Ver opciones',
+      icon: activeInterview ? 'refresh-cw' : 'briefcase',
+      disabled: interviewLoading || anyConversation,
+      hint: 'Puedes practicar otra vez cuando quieras.',
+    });
+    return;
+  }
+
+  if (candidateView === 'interview' || isInterviewView) {
+    setCandidatePrimaryConfig({
+      action: activeInterview ? 'start-interview' : 'back-recommendations',
+      label: interviewLoading ? 'Preparando' : activeInterview ? 'Iniciar práctica' : 'Ver opciones',
+      icon: interviewLoading ? 'refresh-cw' : activeInterview ? 'mic' : 'briefcase',
+      disabled: interviewLoading || anyConversation || (activeInterview ? false : recommendationsLoading),
+      hint: activeInterview ? 'Será una práctica corta de 4 a 6 preguntas.' : 'Elige una vacante para practicar.',
+    });
+    return;
+  }
+
+  if (isRecommendationsView) {
+    setCandidatePrimaryConfig({
+      action: 'refresh-recommendations',
+      label: recommendationsLoading ? 'Buscando' : 'Actualizar opciones',
+      icon: 'refresh-cw',
+      disabled: recommendationsLoading || !profileDone || anyConversation,
+      hint: recommendationsLoading ? 'Esto puede tardar un poco.' : 'Las opciones se actualizan con búsqueda en vivo.',
+    });
+    return;
+  }
+
+  if (profileDone || candidateView === 'saved') {
+    setCandidatePrimaryConfig({
+      action: 'open-recommendations',
+      label: 'Ver recomendaciones',
+      icon: 'arrow-right',
+      disabled: recommendationsLoading || anyConversation,
+      hint: 'Usaremos tu perfil guardado para buscar cursos y empleos.',
+    });
+    return;
+  }
+
+  setCandidatePrimaryConfig({
+    action: 'start-profile',
+    label: 'Iniciar perfil',
+    icon: 'play',
+    disabled: !canStartConversation() || anyConversation || Boolean(activeInterview),
+    hint: candidateSession.intake?.initial_data?.cv_text
+      ? 'Ya tenemos tu contexto inicial y CV.'
+      : 'Puedes subir tu CV antes de iniciar si lo tienes.',
+  });
+}
+
+function handleCandidatePrimaryAction() {
+  if (!candidatePrimaryAction) return;
+
+  if (candidatePrimaryAction === 'start-profile') {
+    startConversation();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'stop-conversation') {
+    stopConversation();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'open-recommendations') {
+    openCandidateRecommendations();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'refresh-recommendations') {
+    fetchCandidateRecommendations();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'start-interview') {
+    startInterviewConversation();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'retry-interview') {
+    retryInterviewPractice();
+    return;
+  }
+
+  if (candidatePrimaryAction === 'back-recommendations') {
+    backToRecommendationsFromInterview();
+  }
+}
+
+function setRecommendationsTab(tab) {
+  const nextTab = tab === 'courses' ? 'courses' : 'jobs';
+
+  recommendationsTab = nextTab;
+  elements.recommendationsPanel?.setAttribute('data-active-tab', nextTab);
+  elements.recommendationsJobsTab?.classList.toggle('is-active', nextTab === 'jobs');
+  elements.recommendationsCoursesTab?.classList.toggle('is-active', nextTab === 'courses');
+  elements.recommendationsJobsTab?.setAttribute('aria-selected', nextTab === 'jobs' ? 'true' : 'false');
+  elements.recommendationsCoursesTab?.setAttribute('aria-selected', nextTab === 'courses' ? 'true' : 'false');
+  elements.recommendationsJobsSection?.setAttribute('aria-hidden', nextTab === 'jobs' ? 'false' : 'true');
+  elements.recommendationsCoursesSection?.setAttribute('aria-hidden', nextTab === 'courses' ? 'false' : 'true');
+  createIcons({ icons: { BookOpen, Briefcase } });
+}
+
+function scrollCandidateElementIntoView(element) {
+  if (!candidateSession || !element || !window.matchMedia('(max-width: 900px)').matches) return;
+
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 function getCandidateSessionFromPath() {
@@ -326,11 +562,13 @@ function initializeCandidateRoute() {
 
   document.body.classList.add('candidate-mode');
   elements.candidateGate.hidden = false;
+  elements.candidateBottomAction.hidden = false;
   elements.candidateGateTitle.textContent = `Código ${candidateSession.code}`;
   elements.candidateGateDetail.textContent = 'Buscando tu registro inicial.';
   elements.panelTitle.textContent = 'Progreso';
   setCandidateVerifyStatus('Cargando registro...');
   setCandidateFlow('link');
+  setCandidateView('loading');
   updateCandidateSessionCopy();
   elements.startButton.disabled = true;
   elements.startButton.innerHTML = '<i data-lucide="play"></i><span>Iniciar entrevista</span>';
@@ -358,6 +596,7 @@ function updateCandidateRecommendationsButton() {
     ? '<i data-lucide="refresh-cw"></i><span>Buscando</span>'
     : '<i data-lucide="arrow-right"></i><span>Continuar</span>';
   createIcons({ icons: { ArrowRight, RefreshCw } });
+  updateCandidatePrimaryAction();
 }
 
 function setCandidateRecommendationsView(active) {
@@ -373,12 +612,14 @@ function setCandidateRecommendationsView(active) {
 
   if (active) {
     setCandidateFlow('recommendations');
+    setCandidateView(activeInterview ? 'interview' : 'recommendations');
     elements.sessionTitle.textContent = 'Recomendaciones';
     elements.sessionDetail.textContent = 'Cursos y empleos alineados a tu perfil.';
     return;
   }
 
   setCandidateFlow(isCandidateProfileCompleted() ? 'saved' : 'context');
+  setCandidateView(isCandidateProfileCompleted() ? 'saved' : 'profile');
   updateCandidateSessionCopy();
   updateCandidateRecommendationsButton();
 }
@@ -427,6 +668,7 @@ async function loadCandidateIntake() {
 
   setCandidateVerifyStatus('Cargando registro...');
   setCandidateFlow('link');
+  setCandidateView('loading');
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}`);
@@ -439,6 +681,7 @@ async function loadCandidateIntake() {
     candidateSession.intake = data.intake;
     candidateSession.contextSent = false;
     setCandidateFlow(data.intake.status === 'profile_completed' ? 'saved' : 'context');
+    setCandidateView(data.intake.status === 'profile_completed' ? 'saved' : 'profile');
     setCandidateVerifyStatus(
       data.intake.status === 'profile_completed'
         ? 'Perfil guardado. Puedes actualizarlo si hace falta.'
@@ -464,6 +707,7 @@ async function loadCandidateIntake() {
     elements.sessionTitle.textContent = 'No se pudo abrir el enlace';
     elements.sessionDetail.textContent = 'Revisa que el código esté completo.';
     setCandidateVerifyStatus(getErrorMessage(error, 'No se pudo abrir este enlace.'), 'error');
+    setCandidateView('error');
     addEvent('error', getErrorMessage(error, 'No se pudo abrir este enlace.'));
   }
 }
@@ -939,6 +1183,8 @@ function renderCandidateRecommendations(data) {
   renderRecommendationCards(elements.recommendationsJobs, jobs, 'job');
   renderRecommendationCards(elements.recommendationsCourses, courses, 'course');
   renderRecommendationGaps(gaps);
+  setRecommendationsTab(jobs.length === 0 && courses.length > 0 ? 'courses' : recommendationsTab);
+  updateCandidatePrimaryAction();
   createIcons({ icons: { ExternalLink, Briefcase, BookOpen, ArrowLeft, RefreshCw, Mic } });
 }
 
@@ -986,15 +1232,19 @@ function createRecommendationCard(item, type) {
   const title = document.createElement('h4');
   const score = document.createElement('span');
   const meta = document.createElement('p');
+  const highlight = document.createElement('p');
   const reasons = createRecommendationList('Por qué encaja', item.reasons);
   const secondary =
     type === 'job'
       ? createRecommendationList('A considerar', item.concerns)
       : createRecommendationList('Refuerza', item.skill_gaps_addressed);
+  const details = document.createElement('details');
+  const detailsLabel = document.createElement('summary');
   const nextStep = document.createElement('p');
   const link = document.createElement('a');
   const actions = document.createElement('div');
   const scoreValue = Number(item.score || 0);
+  const primaryReason = Array.isArray(item.reasons) ? item.reasons.find(Boolean) : '';
 
   article.className = 'recommendation-card';
   header.className = 'recommendation-card-header';
@@ -1009,8 +1259,19 @@ function createRecommendationCard(item, type) {
       ? [item.company, item.fit_level ? `Ajuste ${item.fit_level}` : ''].filter(Boolean).join(' | ') || 'Vacante'
       : item.provider || 'Curso';
 
+  highlight.className = 'recommendation-highlight';
+  highlight.textContent =
+    primaryReason ||
+    (type === 'job'
+      ? 'Esta vacante tiene señales compatibles con tu perfil.'
+      : 'Este curso puede ayudarte a fortalecer tu perfil.');
+
   nextStep.className = 'next-step';
-  nextStep.textContent = item.next_step || 'Revisar la fuente original.';
+  nextStep.textContent = item.next_step ? `Siguiente: ${item.next_step}` : 'Siguiente: revisar la fuente original.';
+
+  details.className = 'recommendation-details';
+  detailsLabel.textContent = 'Ver detalles';
+  details.append(detailsLabel, reasons, secondary);
 
   link.className = 'source-link';
   link.href = item.source_url || '#';
@@ -1023,7 +1284,6 @@ function createRecommendationCard(item, type) {
   }
 
   actions.className = 'recommendation-card-actions';
-  actions.append(link);
 
   if (type === 'job' && item.job_id) {
     const practiceButton = document.createElement('button');
@@ -1034,7 +1294,8 @@ function createRecommendationCard(item, type) {
     actions.append(practiceButton);
   }
 
-  article.append(header, meta, reasons, secondary, nextStep, actions);
+  actions.append(link);
+  article.append(header, meta, highlight, nextStep, details, actions);
   return article;
 }
 
@@ -1106,6 +1367,9 @@ function clearInterviewPanel() {
   elements.interviewFeedback.hidden = true;
   setInterviewStatus('Sin iniciar.');
   updateInterviewControls();
+  if (candidateSession && document.body.classList.contains('recommendations-mode')) {
+    setCandidateView('recommendations');
+  }
 }
 
 function backToRecommendationsFromInterview() {
@@ -1135,6 +1399,7 @@ async function openInterviewPractice(job) {
   clearInterviewFeedbackTimer();
   interviewLoading = true;
   document.body.classList.add('interview-mode');
+  setCandidateView('interview');
   elements.interviewPanel.hidden = false;
   elements.interviewFeedback.hidden = true;
   elements.interviewFeedback.replaceChildren();
@@ -1143,6 +1408,7 @@ async function openInterviewPractice(job) {
   elements.interviewJobSummary.replaceChildren();
   setInterviewStatus('Creando sesión de entrevista...');
   updateInterviewControls();
+  scrollCandidateElementIntoView(elements.interviewPanel);
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/intakes/${candidateSession.code}/interview-sessions`, {
@@ -1170,10 +1436,16 @@ async function openInterviewPractice(job) {
     };
     renderInterviewSession(data.session, data.context);
     setInterviewStatus('Práctica lista. Será breve, de 4 a 6 preguntas.');
+    setCandidateView('interview');
+    scrollCandidateElementIntoView(elements.interviewPanel);
     addEvent('system', `Práctica preparada: ${data.session_id}`);
   } catch (error) {
     activeInterview = null;
+    document.body.classList.remove('interview-mode');
+    elements.interviewPanel.hidden = true;
     setInterviewStatus(getErrorMessage(error, 'No se pudo crear la práctica.'), 'error');
+    setRecommendationsStatus(getErrorMessage(error, 'No se pudo crear la práctica.'), 'error');
+    setCandidateView('recommendations');
     addEvent('error', getErrorMessage(error, 'No se pudo crear la práctica.'));
   } finally {
     interviewLoading = false;
@@ -1235,6 +1507,7 @@ function updateInterviewControls() {
   elements.refreshRecommendationsButton.disabled = recommendationsLoading || !isCandidateProfileCompleted() || anyConversation;
   elements.backToProfileButton.disabled = anyConversation;
   updateMuteButton();
+  updateCandidatePrimaryAction();
 }
 
 async function startInterviewConversation() {
@@ -1464,6 +1737,7 @@ async function pollInterviewFeedback({ repeat = false } = {}) {
     if (data.session.status === 'completed') {
       renderInterviewFeedback(data.session);
       setInterviewStatus('Feedback listo.');
+      setCandidateView('feedback');
       addEvent('system', 'Feedback de entrevista guardado.');
       updateInterviewControls();
       return;
@@ -1514,6 +1788,8 @@ function renderInterviewFeedback(session) {
     createFeedbackList('Respuestas sugeridas', feedback.suggested_answers),
     createFeedbackList('Próximos pasos', feedback.next_steps),
   );
+  setCandidateView('feedback');
+  scrollCandidateElementIntoView(elements.interviewFeedback);
 }
 
 function createFeedbackList(label, values) {
@@ -1609,6 +1885,7 @@ function sendInitialIntakeContext() {
   });
   candidateSession.contextSent = true;
   setCandidateFlow('conversation');
+  setCandidateView('profile');
   addEvent(
     'system',
     intake.initial_data?.cv_text
@@ -1632,6 +1909,7 @@ function requestCandidateConversationEnd() {
   candidateSaveCompletedAt = Date.now();
   candidateFinalAgentMessageAt = 0;
   setCandidateFlow('saved');
+  setCandidateView('saved');
   setCandidateVerifyStatus('Perfil guardado. Esperando despedida del agente...');
   elements.sessionDetail.textContent = 'Perfil guardado. La sesión se cerrará cuando el agente termine de hablar.';
   addEvent('system', 'Perfil guardado; esperaré a que el agente termine de hablar.');
@@ -1677,6 +1955,7 @@ async function evaluateCandidateConversationEnd() {
     setCandidateVerifyStatus('Perfil guardado. Conversación finalizada.');
     elements.sessionTitle.textContent = 'Perfil completado';
     elements.sessionDetail.textContent = 'Gracias. El perfil quedó guardado correctamente. Puedes continuar.';
+    setCandidateView('saved');
     updateCandidateRecommendationsButton();
     return;
   }
@@ -1909,15 +2188,19 @@ elements.profilesTab.addEventListener('click', () => setPanel('profiles'));
 elements.refreshProfilesButton.addEventListener('click', fetchProfiles);
 elements.intakeForm.addEventListener('submit', createIntake);
 elements.copyIntakeUrlButton.addEventListener('click', copyIntakeUrl);
+elements.candidatePrimaryActionButton.addEventListener('click', handleCandidatePrimaryAction);
 elements.continueRecommendationsButton.addEventListener('click', openCandidateRecommendations);
 elements.refreshRecommendationsButton.addEventListener('click', fetchCandidateRecommendations);
 elements.backToProfileButton.addEventListener('click', closeCandidateRecommendations);
+elements.recommendationsJobsTab.addEventListener('click', () => setRecommendationsTab('jobs'));
+elements.recommendationsCoursesTab.addEventListener('click', () => setRecommendationsTab('courses'));
 elements.startInterviewButton.addEventListener('click', startInterviewConversation);
 elements.stopInterviewButton.addEventListener('click', stopConversation);
 elements.muteInterviewButton.addEventListener('click', toggleMute);
 elements.retryInterviewButton.addEventListener('click', retryInterviewPractice);
 elements.backToRecommendationsButton.addEventListener('click', backToRecommendationsFromInterview);
 
+setRecommendationsTab('jobs');
 setConnectedState(false);
 initializeCandidateRoute();
 addEvent('system', `Agente listo: ${AGENT_ID}`);

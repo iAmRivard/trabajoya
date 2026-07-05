@@ -34,178 +34,207 @@
           </div>
         </div>
 
-        <section id="candidateGate" class="candidate-gate" hidden>
+        <section id="candidateHeader" class="candidate-header" aria-label="Estado del flujo" hidden>
           <div>
-            <p class="eyebrow">Enlace de perfil</p>
-            <h2 id="candidateGateTitle">Preparando perfil</h2>
-            <p id="candidateGateDetail">Estamos cargando tu registro inicial.</p>
+            <p class="eyebrow">Tu avance</p>
+            <h2 id="candidateHeaderTitle">Preparando perfil</h2>
           </div>
-          <ol id="candidateSteps" class="candidate-flow" aria-label="Progreso del perfil">
-            <li data-stage="link">Registro</li>
-            <li data-stage="context">Contexto</li>
-            <li data-stage="conversation">Entrevista</li>
-            <li data-stage="saved">Guardado</li>
-            <li data-stage="recommendations">Opciones</li>
-          </ol>
-          <div class="candidate-status-row">
-            <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
-            <button id="continueRecommendationsButton" class="primary-action" type="button" hidden>
-              <i data-lucide="arrow-right"></i>
-              <span>Continuar</span>
-            </button>
-          </div>
+          <span id="candidateHeaderStep" class="candidate-step-badge">Registro</span>
         </section>
 
-        <div class="voice-surface">
-          <div class="voice-orbit" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <div class="session-copy">
-            <h2 id="sessionTitle">Listo para crear un perfil</h2>
-            <p id="sessionDetail">Perfil laboral en preparación.</p>
-          </div>
-        </div>
-
-        <section class="cv-panel" aria-label="CV">
-          <form id="cvForm" class="cv-form">
-            <label for="cvInput">CV</label>
-            <div class="cv-row">
-              <input id="cvInput" name="cv" type="file" accept=".pdf,.txt,application/pdf,text/plain" />
-              <button id="extractCvButton" type="submit">
-                <i data-lucide="file-text"></i>
-                <span>Extraer</span>
+        <div id="candidateMain" class="candidate-main">
+          <section id="candidateGate" class="candidate-gate" hidden>
+            <div>
+              <p class="eyebrow">Enlace de perfil</p>
+              <h2 id="candidateGateTitle">Preparando perfil</h2>
+              <p id="candidateGateDetail">Estamos cargando tu registro inicial.</p>
+            </div>
+            <ol id="candidateSteps" class="candidate-flow" aria-label="Progreso del perfil">
+              <li data-stage="link">Registro</li>
+              <li data-stage="context">Contexto</li>
+              <li data-stage="conversation">Entrevista</li>
+              <li data-stage="saved">Guardado</li>
+              <li data-stage="recommendations">Opciones</li>
+            </ol>
+            <div class="candidate-status-row">
+              <p id="candidateVerifyStatus" class="verify-status">Cargando enlace</p>
+              <button id="continueRecommendationsButton" class="primary-action" type="button" hidden>
+                <i data-lucide="arrow-right"></i>
+                <span>Continuar</span>
               </button>
-              <button id="sendCvContextButton" type="button" disabled>
-                <i data-lucide="upload"></i>
-                <span>Enviar al agente</span>
+            </div>
+          </section>
+
+          <div class="voice-surface">
+            <div class="voice-orbit" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="session-copy">
+              <h2 id="sessionTitle">Listo para crear un perfil</h2>
+              <p id="sessionDetail">Perfil laboral en preparación.</p>
+            </div>
+          </div>
+
+          <section class="cv-panel" aria-label="CV">
+            <form id="cvForm" class="cv-form">
+              <label for="cvInput">CV opcional</label>
+              <div class="cv-row">
+                <input id="cvInput" name="cv" type="file" accept=".pdf,.txt,application/pdf,text/plain" />
+                <button id="extractCvButton" type="submit">
+                  <i data-lucide="file-text"></i>
+                  <span>Extraer</span>
+                </button>
+                <button id="sendCvContextButton" type="button" disabled>
+                  <i data-lucide="upload"></i>
+                  <span>Enviar al agente</span>
+                </button>
+              </div>
+            </form>
+            <div class="cv-result">
+              <p id="cvStatus">Sin CV</p>
+              <pre id="cvPreview" hidden></pre>
+            </div>
+          </section>
+
+          <section id="recommendationsPanel" class="recommendations-panel" aria-label="Recomendaciones" hidden>
+            <div class="recommendations-header">
+              <div>
+                <p class="eyebrow">Siguientes pasos</p>
+                <h2>Recomendaciones para tu perfil</h2>
+                <p id="recommendationsSummary">Buscaremos cursos y empleos alineados a tu perfil laboral.</p>
+              </div>
+              <div class="recommendations-actions">
+                <button id="backToProfileButton" type="button">
+                  <i data-lucide="arrow-left"></i>
+                  <span>Perfil</span>
+                </button>
+                <button id="refreshRecommendationsButton" class="primary-action" type="button">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Actualizar</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="recommendationsLoading" class="recommendations-loading" hidden>
+              <span></span>
+              <p>Buscando oportunidades y comparándolas con tu perfil.</p>
+            </div>
+
+            <p id="recommendationsStatus" class="recommendations-status">Sin cargar</p>
+            <div id="recommendationsMeta" class="recommendations-meta" hidden></div>
+
+            <div id="recommendationsTabs" class="recommendations-tabs" role="tablist" aria-label="Tipo de recomendación">
+              <button id="recommendationsJobsTab" class="segment-button is-active" type="button" role="tab" aria-selected="true" aria-controls="recommendationsJobsSection">
+                <i data-lucide="briefcase"></i>
+                <span>Empleos</span>
+              </button>
+              <button id="recommendationsCoursesTab" class="segment-button" type="button" role="tab" aria-selected="false" aria-controls="recommendationsCoursesSection">
+                <i data-lucide="book-open"></i>
+                <span>Cursos</span>
+              </button>
+            </div>
+
+            <section id="interviewPanel" class="interview-panel" aria-label="Simulacion de entrevista" hidden>
+              <div class="interview-header">
+                <div>
+                  <p class="eyebrow">Practica corta</p>
+                  <h3 id="interviewTitle">Simulacion de entrevista</h3>
+                  <p id="interviewDetail">Elegí una vacante recomendada para practicar con un entrevistador de voz.</p>
+                </div>
+                <button id="backToRecommendationsButton" type="button">
+                  <i data-lucide="arrow-left"></i>
+                  <span>Opciones</span>
+                </button>
+              </div>
+
+              <div class="interview-job" id="interviewJobSummary"></div>
+
+              <div class="interview-controls" aria-label="Controles de practica">
+                <button id="startInterviewButton" class="primary-action" type="button" disabled>
+                  <i data-lucide="play"></i>
+                  <span>Iniciar práctica</span>
+                </button>
+                <button id="stopInterviewButton" type="button" disabled>
+                  <i data-lucide="square"></i>
+                  <span>Detener</span>
+                </button>
+                <button id="muteInterviewButton" type="button" disabled aria-pressed="false">
+                  <i data-lucide="mic"></i>
+                  <span>Micrófono</span>
+                </button>
+                <button id="retryInterviewButton" type="button" hidden>
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Repetir</span>
+                </button>
+              </div>
+
+              <p id="interviewStatus" class="interview-status">Sin iniciar.</p>
+
+              <section id="interviewFeedback" class="interview-feedback" aria-label="Feedback de entrevista" hidden></section>
+            </section>
+
+            <div class="recommendations-grid">
+              <section id="recommendationsJobsSection" class="recommendation-column" aria-labelledby="jobsTitle" data-recommendation-section="jobs">
+                <div class="recommendation-column-title">
+                  <i data-lucide="briefcase"></i>
+                  <h3 id="jobsTitle">Empleos</h3>
+                </div>
+                <div id="recommendationsJobs" class="recommendation-list"></div>
+              </section>
+
+              <section id="recommendationsCoursesSection" class="recommendation-column" aria-labelledby="coursesTitle" data-recommendation-section="courses">
+                <div class="recommendation-column-title">
+                  <i data-lucide="book-open"></i>
+                  <h3 id="coursesTitle">Cursos</h3>
+                </div>
+                <div id="recommendationsCourses" class="recommendation-list"></div>
+              </section>
+            </div>
+
+            <section class="profile-gaps" aria-labelledby="profileGapsTitle">
+              <h3 id="profileGapsTitle">Para fortalecer tu perfil</h3>
+              <div id="recommendationsGaps" class="gap-list"></div>
+            </section>
+          </section>
+
+          <div class="controls" aria-label="Controles de conversación">
+            <button id="startButton" class="primary-action" type="button">
+              <i data-lucide="play"></i>
+              <span>Iniciar</span>
+            </button>
+            <button id="stopButton" type="button" disabled>
+              <i data-lucide="square"></i>
+              <span>Detener</span>
+            </button>
+            <button id="muteButton" type="button" disabled aria-pressed="false">
+              <i data-lucide="mic"></i>
+              <span>Micrófono</span>
+            </button>
+          </div>
+
+          <form id="textForm" class="text-composer">
+            <label for="textInput">Mensaje</label>
+            <div class="input-row">
+              <input id="textInput" name="message" type="text" autocomplete="off" placeholder="Escribir al agente" disabled />
+              <button id="sendButton" type="submit" disabled title="Enviar mensaje">
+                <i data-lucide="send"></i>
+                <span>Enviar</span>
               </button>
             </div>
           </form>
-          <div class="cv-result">
-            <p id="cvStatus">Sin CV</p>
-            <pre id="cvPreview" hidden></pre>
-          </div>
-        </section>
+        </div>
 
-        <section id="recommendationsPanel" class="recommendations-panel" aria-label="Recomendaciones" hidden>
-          <div class="recommendations-header">
-            <div>
-              <p class="eyebrow">Siguientes pasos</p>
-              <h2>Recomendaciones para tu perfil</h2>
-              <p id="recommendationsSummary">Buscaremos cursos y empleos alineados a tu perfil laboral.</p>
-            </div>
-            <div class="recommendations-actions">
-              <button id="backToProfileButton" type="button">
-                <i data-lucide="arrow-left"></i>
-                <span>Perfil</span>
-              </button>
-              <button id="refreshRecommendationsButton" class="primary-action" type="button">
-                <i data-lucide="refresh-cw"></i>
-                <span>Actualizar</span>
-              </button>
-            </div>
-          </div>
-
-          <div id="recommendationsLoading" class="recommendations-loading" hidden>
-            <span></span>
-            <p>Buscando oportunidades y comparándolas con tu perfil.</p>
-          </div>
-
-          <p id="recommendationsStatus" class="recommendations-status">Sin cargar</p>
-          <div id="recommendationsMeta" class="recommendations-meta" hidden></div>
-
-          <section id="interviewPanel" class="interview-panel" aria-label="Simulacion de entrevista" hidden>
-            <div class="interview-header">
-              <div>
-                <p class="eyebrow">Practica corta</p>
-                <h3 id="interviewTitle">Simulacion de entrevista</h3>
-                <p id="interviewDetail">Elegí una vacante recomendada para practicar con un entrevistador de voz.</p>
-              </div>
-              <button id="backToRecommendationsButton" type="button">
-                <i data-lucide="arrow-left"></i>
-                <span>Opciones</span>
-              </button>
-            </div>
-
-            <div class="interview-job" id="interviewJobSummary"></div>
-
-            <div class="interview-controls" aria-label="Controles de practica">
-              <button id="startInterviewButton" class="primary-action" type="button" disabled>
-                <i data-lucide="play"></i>
-                <span>Iniciar práctica</span>
-              </button>
-              <button id="stopInterviewButton" type="button" disabled>
-                <i data-lucide="square"></i>
-                <span>Detener</span>
-              </button>
-              <button id="muteInterviewButton" type="button" disabled aria-pressed="false">
-                <i data-lucide="mic"></i>
-                <span>Micrófono</span>
-              </button>
-              <button id="retryInterviewButton" type="button" hidden>
-                <i data-lucide="refresh-cw"></i>
-                <span>Repetir</span>
-              </button>
-            </div>
-
-            <p id="interviewStatus" class="interview-status">Sin iniciar.</p>
-
-            <section id="interviewFeedback" class="interview-feedback" aria-label="Feedback de entrevista" hidden></section>
-          </section>
-
-          <div class="recommendations-grid">
-            <section class="recommendation-column" aria-labelledby="jobsTitle">
-              <div class="recommendation-column-title">
-                <i data-lucide="briefcase"></i>
-                <h3 id="jobsTitle">Empleos</h3>
-              </div>
-              <div id="recommendationsJobs" class="recommendation-list"></div>
-            </section>
-
-            <section class="recommendation-column" aria-labelledby="coursesTitle">
-              <div class="recommendation-column-title">
-                <i data-lucide="book-open"></i>
-                <h3 id="coursesTitle">Cursos</h3>
-              </div>
-              <div id="recommendationsCourses" class="recommendation-list"></div>
-            </section>
-          </div>
-
-          <section class="profile-gaps" aria-labelledby="profileGapsTitle">
-            <h3 id="profileGapsTitle">Para fortalecer tu perfil</h3>
-            <div id="recommendationsGaps" class="gap-list"></div>
-          </section>
-        </section>
-
-        <div class="controls" aria-label="Controles de conversación">
-          <button id="startButton" class="primary-action" type="button">
+        <div id="candidateBottomAction" class="candidate-bottom-action" hidden>
+          <button id="candidatePrimaryActionButton" class="primary-action" type="button" disabled>
             <i data-lucide="play"></i>
             <span>Iniciar</span>
           </button>
-          <button id="stopButton" type="button" disabled>
-            <i data-lucide="square"></i>
-            <span>Detener</span>
-          </button>
-          <button id="muteButton" type="button" disabled aria-pressed="false">
-            <i data-lucide="mic"></i>
-            <span>Micrófono</span>
-          </button>
+          <p id="candidateBottomHint">Cargando tu enlace.</p>
         </div>
-
-        <form id="textForm" class="text-composer">
-          <label for="textInput">Mensaje</label>
-          <div class="input-row">
-            <input id="textInput" name="message" type="text" autocomplete="off" placeholder="Escribir al agente" disabled />
-            <button id="sendButton" type="submit" disabled title="Enviar mensaje">
-              <i data-lucide="send"></i>
-              <span>Enviar</span>
-            </button>
-          </div>
-        </form>
       </section>
 
       <aside class="side-panel" aria-label="Panel de seguimiento">
