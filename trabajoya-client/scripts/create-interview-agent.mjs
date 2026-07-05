@@ -220,28 +220,8 @@ function saveInterviewFeedbackTool() {
 }
 
 function schemaField(schema) {
-  if (['array', 'object'].includes(schema.type)) {
-    return {
-      description: '',
-      ...schema,
-    };
-  }
-
-  const defaultConstantValue =
-    schema.type === 'boolean' ? false : schema.type === 'integer' || schema.type === 'number' ? 0 : '';
-  const field = {
+  return {
     description: '',
-    is_system_provided: false,
-    dynamic_variable: '',
-    allowed_values_dynamic_variable: '',
-    constant_value: defaultConstantValue,
-    is_omitted: false,
     ...schema,
   };
-
-  if (!['array', 'object'].includes(schema.type)) {
-    field.enum ??= null;
-  }
-
-  return field;
 }
