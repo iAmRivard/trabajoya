@@ -135,52 +135,98 @@ function saveInterviewFeedbackTool() {
       url: feedbackWebhookUrl,
       method: 'POST',
       request_headers: {
+        'Content-Type': 'application/json',
         'X-Trabajoya-Key': feedbackApiKey,
       },
+      path_params_schema: {},
+      query_params_schema: null,
       request_body_schema: {
         type: 'object',
+        description: 'Feedback estructurado de la simulacion de entrevista.',
         required: ['interview_session_id', 'status', 'scores', 'feedback'],
         properties: {
-          interview_session_id: {
+          interview_session_id: schemaField({
             type: 'string',
             description: 'UUID recibido en el contexto de la practica.',
-          },
-          elevenlabs_conversation_id: {
+          }),
+          elevenlabs_conversation_id: schemaField({
             type: 'string',
             description: 'Conversation ID recibido en el contexto, si esta disponible.',
-          },
-          status: {
+          }),
+          status: schemaField({
             type: 'string',
             enum: ['completed', 'failed'],
             description: 'completed si la entrevista termino y se puede evaluar.',
-          },
+          }),
           scores: {
             type: 'object',
+            description: 'Puntajes de 0 a 100 por dimension evaluada.',
             required: ['overall'],
             properties: {
-              overall: { type: 'integer', minimum: 0, maximum: 100 },
-              communication: { type: 'integer', minimum: 0, maximum: 100 },
-              role_fit: { type: 'integer', minimum: 0, maximum: 100 },
-              examples: { type: 'integer', minimum: 0, maximum: 100 },
-              confidence: { type: 'integer', minimum: 0, maximum: 100 },
-              clarity: { type: 'integer', minimum: 0, maximum: 100 },
+              overall: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Puntaje global.' }),
+              communication: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Comunicacion.' }),
+              role_fit: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Ajuste al puesto.' }),
+              examples: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Calidad de ejemplos.' }),
+              confidence: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Seguridad al responder.' }),
+              clarity: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Claridad.' }),
             },
           },
           feedback: {
             type: 'object',
+            description: 'Retroalimentacion concreta para el candidato.',
             required: ['overall_score', 'summary', 'strengths', 'improvements', 'suggested_answers', 'next_steps'],
             properties: {
-              overall_score: { type: 'integer', minimum: 0, maximum: 100 },
-              summary: { type: 'string' },
-              strengths: { type: 'array', items: { type: 'string' } },
-              improvements: { type: 'array', items: { type: 'string' } },
-              suggested_answers: { type: 'array', items: { type: 'string' } },
-              next_steps: { type: 'array', items: { type: 'string' } },
-              closing_note: { type: 'string' },
+              overall_score: schemaField({ type: 'integer', minimum: 0, maximum: 100, description: 'Puntaje global.' }),
+              summary: schemaField({ type: 'string', description: 'Resumen breve del desempeno.' }),
+              strengths: schemaField({
+                type: 'array',
+                description: 'Fortalezas observadas.',
+                items: { type: 'string' },
+              }),
+              improvements: schemaField({
+                type: 'array',
+                description: 'Areas de mejora concretas.',
+                items: { type: 'string' },
+              }),
+              suggested_answers: schemaField({
+                type: 'array',
+                description: 'Respuestas sugeridas o marcos de respuesta.',
+                items: { type: 'string' },
+              }),
+              next_steps: schemaField({
+                type: 'array',
+                description: 'Proximos pasos recomendados.',
+                items: { type: 'string' },
+              }),
+              closing_note: schemaField({ type: 'string', description: 'Nota final breve.' }),
             },
           },
         },
       },
+      response_body_schema: {
+        type: 'object',
+        description: 'Respuesta del webhook de guardado.',
+        properties: {
+          result: schemaField({ type: 'string', description: 'Resultado del guardado.' }),
+          ok: schemaField({ type: 'boolean', description: 'Indicador de exito.' }),
+          message: schemaField({ type: 'string', description: 'Mensaje corto.' }),
+        },
+        required: [],
+      },
+      response_filter: null,
     },
+  };
+}
+
+function schemaField(schema) {
+  return {
+    description: '',
+    enum: null,
+    is_system_provided: false,
+    dynamic_variable: '',
+    allowed_values_dynamic_variable: '',
+    constant_value: '',
+    is_omitted: false,
+    ...schema,
   };
 }
