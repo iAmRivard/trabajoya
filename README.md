@@ -4,6 +4,10 @@ TrabajoYA es una app fullstack para crear registros iniciales de candidatos,
 generar un codigo unico y completar el perfil con un agente de voz de
 ElevenLabs.
 
+## Diagrama general
+
+![Diagrama general de flujo TrabajoYA](contexto/presentacion/diagrama-general-flujo-trabajoya.png)
+
 ## Estructura
 
 ```text
